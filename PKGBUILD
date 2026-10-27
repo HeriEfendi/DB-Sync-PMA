@@ -1,6 +1,6 @@
 # Maintainer: Heri Efendi <heriefendi@gmail.com>
 pkgname=db-sync-pma
-pkgver=0.25.2
+pkgver=0.25.3
 pkgrel=1
 pkgdesc="DB Sync Engine PMA (PMA to Local MySQL)"
 arch=('x86_64')
