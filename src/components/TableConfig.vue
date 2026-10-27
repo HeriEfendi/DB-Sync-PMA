@@ -21,9 +21,13 @@
       </div>
       <div class="tools-divider"></div>
       <select v-model="selectedTemplateName" class="form-select preset-select" @change="loadTableTemplate"><option value="">-- Template Tabel --</option><option v-for="(t, key) in tableTemplates" :key="key" :value="key">{{ key }}</option></select>
-      <button class="btn btn-secondary btn-xs" :disabled="!selectedTemplateName" @click="updateTableTemplate">Simpan</button>
-      <button class="btn btn-primary btn-xs" @click="createTableTemplate">Buat</button>
-      <button class="btn btn-danger btn-xs" :disabled="!selectedTemplateName" @click="deleteTableTemplate">Hapus</button>
+      <label class="sr-only" for="table-template-action">Kelola template tabel</label>
+      <select id="table-template-action" class="form-select preset-select" value="" @change="handleTableTemplateAction">
+        <option value="" disabled>Kelola Template Tabel</option>
+        <option value="update" :disabled="!selectedTemplateName">Update</option>
+        <option value="create">Tambah</option>
+        <option value="delete" :disabled="!selectedTemplateName">Delete</option>
+      </select>
     </div>
 
     <div class="table-select-container">
@@ -90,6 +94,9 @@ const props = defineProps({
   availableTables: { type: Array, default: () => [] },
   fetchingTables: { type: Boolean, default: false },
   syncTableStates: { type: Array, default: () => [] },
+  requestConfirmation: { type: Function, required: true },
+  requestInput: { type: Function, required: true },
+  notifyToast: { type: Function, required: true },
 });
 
 const emit = defineEmits([
@@ -197,14 +204,22 @@ const toggleTableSelection = (tableName) => {
 };
 
 const selectAllTables = () => {
+  const previousCount = props.selectedTables.length;
   const current = new Set(props.selectedTables);
   filteredTables.value.forEach((t) => current.add(t));
   emit('update:selectedTables', [...current]);
+  const addedCount = current.size - previousCount;
+  props.notifyToast({
+    type: addedCount ? 'success' : 'info',
+    title: addedCount ? 'Tabel dipilih' : 'Pilihan sudah lengkap',
+    message: addedCount ? `${addedCount} tabel ditambahkan ke pilihan.` : 'Semua tabel yang tampil sudah dipilih.',
+  });
 };
 
 const deselectAllTables = () => {
   const filtered = new Set(filteredTables.value);
   emit('update:selectedTables', props.selectedTables.filter((t) => !filtered.has(t)));
+  props.notifyToast({ type: 'info', title: 'Pilihan tabel dibersihkan', message: 'Tabel yang tampil pada daftar sudah tidak dipilih.' });
 };
 
 const addManualTable = () => {
@@ -212,6 +227,7 @@ const addManualTable = () => {
   if (!tName) return;
 
   const currentAvailable = [...props.availableTables];
+  const alreadyExists = currentAvailable.includes(tName);
   if (!currentAvailable.includes(tName)) {
     currentAvailable.push(tName);
     emit('update:availableTables', currentAvailable);
@@ -224,6 +240,13 @@ const addManualTable = () => {
   }
 
   manualTableName.value = '';
+  props.notifyToast({
+    type: alreadyExists ? 'info' : 'success',
+    title: alreadyExists ? 'Tabel sudah tersedia' : 'Tabel ditambahkan',
+    message: alreadyExists
+      ? `Tabel ${tName} sudah ada dan dipilih untuk sinkronisasi.`
+      : `Tabel ${tName} ditambahkan ke daftar pilihan.`,
+  });
 };
 
 const loadTableTemplateList = () => {
@@ -244,16 +267,22 @@ const loadTableTemplate = () => {
   const name = selectedTemplateName.value;
   if (!name || !tableTemplates.value[name]) return;
   emit('update:selectedTables', [...tableTemplates.value[name]]);
+  props.notifyToast({ type: 'success', title: 'Template diterapkan', message: `${tableTemplates.value[name].length} tabel dipilih dari "${name}".` });
 };
 
-const createTableTemplate = () => {
-  const name = prompt('Nama template tabel baru (misal: "Core Tables" atau "HR Module")');
+const createTableTemplate = async () => {
+  const name = await props.requestInput({
+    title: 'Tambah template tabel',
+    placeholder: 'Contoh: Core Tables',
+    confirmLabel: 'Tambah template',
+  });
   if (!name || !name.trim()) return;
 
   const trimmed = name.trim();
   tableTemplates.value[trimmed] = [...props.selectedTables];
   localStorage.setItem(getTemplatesStorageKey(), JSON.stringify(tableTemplates.value));
   selectedTemplateName.value = trimmed;
+  props.notifyToast({ type: 'success', title: 'Template ditambahkan', message: `Template "${trimmed}" menyimpan ${props.selectedTables.length} tabel.` });
 };
 
 const updateTableTemplate = () => {
@@ -261,14 +290,30 @@ const updateTableTemplate = () => {
   if (!name) return;
   tableTemplates.value[name] = [...props.selectedTables];
   localStorage.setItem(getTemplatesStorageKey(), JSON.stringify(tableTemplates.value));
+  props.notifyToast({ type: 'success', title: 'Template diperbarui', message: `${props.selectedTables.length} tabel disimpan ke "${name}".` });
 };
 
-const deleteTableTemplate = () => {
+const deleteTableTemplate = async () => {
   const name = selectedTemplateName.value;
   if (!name || !tableTemplates.value[name]) return;
-  if (!confirm(`Hapus template "${name}"? Tindakan ini tidak bisa dibatalkan.`)) return;
+  const confirmed = await props.requestConfirmation({
+    title: 'Hapus template tabel?',
+    message: `Template "${name}" akan dihapus permanen. Tindakan ini tidak bisa dibatalkan.`,
+    confirmLabel: 'Hapus template',
+  });
+  if (!confirmed) return;
   delete tableTemplates.value[name];
   localStorage.setItem(getTemplatesStorageKey(), JSON.stringify(tableTemplates.value));
   selectedTemplateName.value = '';
+  props.notifyToast({ type: 'success', title: 'Template dihapus', message: `Template "${name}" berhasil dihapus.` });
+};
+
+const handleTableTemplateAction = (event) => {
+  const action = event.target.value;
+  event.target.value = '';
+
+  if (action === 'update') updateTableTemplate();
+  if (action === 'create') createTableTemplate();
+  if (action === 'delete') deleteTableTemplate();
 };
 </script>

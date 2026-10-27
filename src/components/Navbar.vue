@@ -53,7 +53,6 @@
     <div class="profile-actions">
       <button class="btn btn-secondary btn-sm" type="button" @click="$emit('edit-config')">Edit Koneksi</button>
       <button class="btn btn-primary btn-sm" type="button" @click="$emit('create-profile')">Buat Profil</button>
-      <button class="btn btn-danger btn-sm" type="button" :disabled="!canDeleteProfile" @click="$emit('delete-profile')">Hapus</button>
     </div>
   </header>
 </template>
@@ -85,10 +84,9 @@ const props = defineProps({
   presetOptions: { type: Object, default: () => ({}) },
   remoteDatabase: { type: String, default: '' },
   localDatabase: { type: String, default: '' },
-  canDeleteProfile: { type: Boolean, default: false },
 });
 
 const displayVersion = computed(() => props.appVersion || packageJson.version);
 
-defineEmits(['trigger-sync', 'test-pma', 'test-local', 'select-preset', 'edit-config', 'create-profile', 'delete-profile']);
+defineEmits(['trigger-sync', 'test-pma', 'test-local', 'select-preset', 'edit-config', 'create-profile']);
 </script>

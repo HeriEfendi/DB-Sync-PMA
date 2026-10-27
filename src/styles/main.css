@@ -43,7 +43,7 @@
   .desktop-shell { @apply flex h-screen w-full flex-1 flex-col bg-[#0d0f13]; }
   .desktop-frame { @apply flex h-full w-full min-h-0 flex-1; }
   .desktop-content { @apply flex min-w-0 flex-1 flex-col; }
-  .dashboard-body { @apply flex min-h-0 w-full flex-1 flex-col gap-2.5 overflow-hidden px-4 py-3; }
+  .dashboard-body { @apply flex min-h-0 w-full flex-1 flex-col gap-2.5 overflow-hidden px-1 pt-2 pb-1; }
   .eyebrow { @apply text-[9px] font-bold tracking-[.12em] text-[#657083]; }
   .sync-status-indicator { @apply flex min-w-0 items-center gap-2 rounded-md border border-[rgba(85,197,220,.24)] bg-[rgba(85,197,220,.08)] px-2.5 py-1.5 text-[10px] text-[#b4c1d2]; }
   .sync-status-indicator strong { @apply max-w-[180px] truncate font-medium text-[#edf0f7]; }
@@ -57,6 +57,34 @@
   .workflow-grid > [data-ui] { @apply w-full min-w-0; }
   .connection-modal-backdrop { @apply fixed inset-0 z-40 grid place-items-center p-6; background: rgba(5,8,14,.72); backdrop-filter: blur(4px); }
   .connection-modal { @apply flex w-full min-h-0 flex-col overflow-hidden rounded-xl border border-[#343b48] bg-[#11141b]; max-width: 900px; max-height: calc(100vh - 48px); box-shadow: 0 24px 80px rgba(0,0,0,.55); }
+  .confirm-modal-backdrop { @apply fixed inset-0 z-[60] grid place-items-center p-4; background: rgba(5,8,14,.74); backdrop-filter: blur(6px); }
+  .confirm-dialog { @apply grid w-full grid-cols-[auto_1fr] items-start gap-x-3 gap-y-5 rounded-xl border border-[#343b48] bg-[#171a20] p-5; max-width: 400px; box-shadow: 0 24px 80px rgba(0,0,0,.6); }
+  .confirm-dialog-icon { @apply grid h-10 w-10 place-items-center rounded-full border border-[rgba(242,120,138,.28)] bg-[rgba(242,120,138,.12)] text-[20px] font-bold text-[#f2788a]; }
+  .confirm-dialog-copy { @apply min-w-0 pt-0.5; }
+  .confirm-dialog-copy h2 { @apply mt-1 text-[14px] font-semibold text-[#edf0f7]; }
+  .confirm-dialog-copy p { @apply mt-1.5 break-words text-[11px] leading-relaxed text-[#9aa3b3]; }
+  .confirm-dialog-input { @apply grid-cols-1 gap-y-4; max-width: 440px; }
+  .confirm-dialog-input .confirm-dialog-copy { @apply pt-0; }
+  .action-dialog-input { @apply mt-2; }
+  .confirm-dialog-input .confirm-dialog-actions { grid-column: 1; }
+  .confirm-dialog-actions { @apply col-span-2 flex justify-end gap-2 border-t border-[#2a2f39] pt-3; }
+  .confirm-dialog:focus { outline: none; }
+  .toast-stack { @apply fixed bottom-5 right-5 z-[80] flex w-[min(360px,calc(100vw-32px))] flex-col gap-2; pointer-events: none; }
+  .app-toast { @apply flex items-start gap-2.5 rounded-lg border border-[#343b48] bg-[#171a20] p-3; box-shadow: 0 12px 36px rgba(0,0,0,.4); pointer-events: auto; }
+  .toast-icon { @apply grid h-6 w-6 flex-none place-items-center rounded-full bg-white/[0.08] text-[12px] font-bold text-[#9aa3b3]; }
+  .app-toast-success { @apply border-[rgba(85,214,160,.28)]; }
+  .app-toast-success .toast-icon { @apply bg-[rgba(85,214,160,.12)] text-[#55d6a0]; }
+  .app-toast-warning .toast-icon { @apply bg-[rgba(240,184,91,.12)] text-[#f0b85b]; }
+  .app-toast-error { @apply border-[rgba(242,120,138,.28)]; }
+  .app-toast-error .toast-icon { @apply bg-[rgba(242,120,138,.12)] text-[#f2788a]; }
+  .toast-copy { @apply min-w-0 flex-1; }
+  .toast-copy strong { @apply block text-[11px] font-semibold text-[#edf0f7]; }
+  .toast-copy p { @apply mt-0.5 break-words text-[10px] leading-relaxed text-[#9aa3b3]; }
+  .toast-close { @apply -mt-1 -mr-1 grid h-6 w-6 flex-none place-items-center rounded text-[16px] text-[#657083]; }
+  .toast-close:hover { @apply bg-white/[0.08] text-white; }
+  .toast-enter-active, .toast-leave-active, .toast-move { transition: opacity .18s ease, transform .18s ease; }
+  .toast-enter-from, .toast-leave-to { opacity: 0; transform: translateX(12px); }
+  .toast-leave-active { @apply absolute right-0; }
   .dialog-titlebar { @apply flex flex-none items-center justify-between border-b border-[#2a2f39] px-4 py-2.5; }
   .dialog-titlebar h2 { @apply mt-0.5 text-[14px] font-semibold text-[#edf0f7]; }
   .connection-modal-content { @apply min-h-0 flex-1 overflow-y-auto p-2; }
@@ -1273,6 +1301,7 @@
   [data-ui="logs"] .toolbar-right { flex-wrap: wrap; }
   .connection-modal-backdrop { padding: 8px; }
   .connection-modal { max-height: calc(100vh - 16px); }
+  .confirm-dialog { padding: 16px; }
   .console-dialog { width: 100%; height: min(680px, calc(100vh - 16px)); }
   .console-minimized-dock { right: 8px; bottom: 32px; width: calc(100vw - 16px); }
 }

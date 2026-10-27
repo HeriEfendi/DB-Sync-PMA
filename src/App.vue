@@ -18,14 +18,12 @@
           :preset-options="connectionConfigRef?.presets"
           :remote-database="pmaConfig.database"
           :local-database="localConfig.database"
-          :can-delete-profile="Boolean(currentPresetName)"
           @trigger-sync="handleStartSync"
           @test-pma="testPmaConnection"
           @test-local="testLocalConnection"
           @select-preset="connectionConfigRef?.selectPreset($event)"
           @edit-config="showConnectionModal = true"
           @create-profile="connectionConfigRef?.createPreset()"
-          @delete-profile="connectionConfigRef?.deletePreset()"
         />
 
         <main class="dashboard-body">
@@ -36,6 +34,9 @@
               v-model:available-tables="availableTables"
               :fetching-tables="fetchingTables"
               :sync-table-states="tableStates"
+              :request-confirmation="requestConfirmation"
+              :request-input="requestInput"
+              :notify-toast="notifyToast"
               @fetch-tables="fetchTablesFromPma"
             />
 
@@ -73,6 +74,9 @@
                   v-model:pma-config="pmaConfig"
                   v-model:local-config="localConfig"
                   v-model:selected-preset="currentPresetName"
+                  :request-confirmation="requestConfirmation"
+                  :request-input="requestInput"
+                  :notify-toast="notifyToast"
                   @test-pma="testPmaConnection"
                   @test-local="testLocalConnection"
                   @preset-changed="handlePresetChanged"
@@ -113,8 +117,68 @@
               </div>
             </header>
           </div>
+
+          <div
+            v-if="actionDialog.open"
+            class="confirm-modal-backdrop"
+            @click.self="cancelActionDialog"
+          >
+            <section
+              class="confirm-dialog"
+              :class="{ 'confirm-dialog-input': actionDialog.mode === 'input' }"
+              :role="actionDialog.mode === 'input' ? 'dialog' : 'alertdialog'"
+              aria-modal="true"
+              aria-labelledby="action-dialog-title"
+              :aria-describedby="actionDialog.mode === 'confirm' ? 'action-dialog-message' : undefined"
+              tabindex="-1"
+              @keydown.esc.prevent.stop="cancelActionDialog"
+            >
+              <div v-if="actionDialog.mode === 'confirm'" class="confirm-dialog-icon" aria-hidden="true">!</div>
+              <div class="confirm-dialog-copy">
+                <span class="eyebrow">{{ actionDialog.mode === 'input' ? 'INPUT' : 'KONFIRMASI' }}</span>
+                <h2 id="action-dialog-title">{{ actionDialog.title }}</h2>
+                <p v-if="actionDialog.mode === 'confirm'" id="action-dialog-message">{{ actionDialog.message }}</p>
+                <input
+                  v-else
+                  v-model="actionDialog.value"
+                  class="form-input action-dialog-input"
+                  type="text"
+                  :placeholder="actionDialog.placeholder"
+                  autofocus
+                  @keydown.enter.prevent="finishActionDialog(actionDialog.value.trim() || null)"
+                />
+              </div>
+              <div class="confirm-dialog-actions">
+                <button class="btn btn-secondary btn-sm" type="button" @click="cancelActionDialog">
+                  Batal
+                </button>
+                <button
+                  class="btn btn-sm"
+                  :class="actionDialog.mode === 'input' ? 'btn-primary' : 'btn-danger'"
+                  type="button"
+                  :disabled="actionDialog.mode === 'input' && !actionDialog.value.trim()"
+                  @click="finishActionDialog(actionDialog.mode === 'input' ? actionDialog.value.trim() : true)"
+                >
+                  {{ actionDialog.confirmLabel }}
+                </button>
+              </div>
+            </section>
+          </div>
+
+          <div class="toast-stack" role="status" aria-live="polite" aria-atomic="false">
+            <TransitionGroup name="toast">
+              <article v-for="toast in toasts" :key="toast.id" class="app-toast" :class="`app-toast-${toast.type}`">
+                <span class="toast-icon" aria-hidden="true">{{ toast.type === 'success' ? '✓' : toast.type === 'error' ? '!' : 'i' }}</span>
+                <div class="toast-copy">
+                  <strong>{{ toast.title }}</strong>
+                  <p>{{ toast.message }}</p>
+                </div>
+                <button class="toast-close" type="button" :aria-label="`Tutup notifikasi: ${toast.title}`" @click="dismissToast(toast.id)">×</button>
+              </article>
+            </TransitionGroup>
+          </div>
         </main>
-        <footer class="status-bar"><span><i class="status-dot" :class="{ busy: isSyncing }"></i>{{ isSyncing ? 'Sinkronisasi berjalan' : 'Siap' }}</span><span>Local workspace</span><span class="status-spacer"></span><span>UTF-8</span><span>v{{ appVersion }}</span></footer>
+        <!-- <footer class="status-bar"><span><i class="status-dot" :class="{ busy: isSyncing }"></i>{{ isSyncing ? 'Sinkronisasi berjalan' : 'Siap' }}</span><span>Local workspace</span><span class="status-spacer"></span><span>UTF-8</span><span>v{{ appVersion }}</span></footer> -->
       </section>
     </div>
   </div>
@@ -178,6 +242,67 @@ const consoleMinimized = ref(false);
 const connectionConfigRef = ref(null);
 const autoSyncInterval = ref(0);
 let timerId = null;
+const toasts = ref([]);
+const toastTimers = new Map();
+let nextToastId = 0;
+
+const notifyToast = ({ type = 'info', title = 'Informasi', message, duration = 3600 }) => {
+  const toast = { id: ++nextToastId, type, title, message };
+  toasts.value.push(toast);
+  if (toasts.value.length > 4) dismissToast(toasts.value[0].id);
+  toastTimers.set(toast.id, setTimeout(() => dismissToast(toast.id), duration));
+};
+
+const dismissToast = (id) => {
+  const timer = toastTimers.get(id);
+  if (timer) clearTimeout(timer);
+  toastTimers.delete(id);
+  toasts.value = toasts.value.filter((toast) => toast.id !== id);
+};
+const actionDialog = ref({
+  open: false,
+  mode: 'confirm',
+  title: '',
+  message: '',
+  confirmLabel: 'Lanjutkan',
+  placeholder: '',
+  value: '',
+});
+let resolveActionDialog = null;
+
+const openActionDialog = (options) => new Promise((resolve) => {
+  if (resolveActionDialog) {
+    resolveActionDialog(actionDialog.value.mode === 'input' ? null : false);
+  }
+  resolveActionDialog = resolve;
+  actionDialog.value = {
+    open: true,
+    mode: 'confirm',
+    title: '',
+    message: '',
+    confirmLabel: 'Lanjutkan',
+    placeholder: '',
+    value: '',
+    ...options,
+  };
+});
+
+const requestConfirmation = ({ title, message, confirmLabel = 'Lanjutkan' }) =>
+  openActionDialog({ mode: 'confirm', title, message, confirmLabel });
+
+const requestInput = ({ title, placeholder = '', confirmLabel = 'Simpan' }) =>
+  openActionDialog({ mode: 'input', title, placeholder, confirmLabel });
+
+const finishActionDialog = (result) => {
+  const resolve = resolveActionDialog;
+  resolveActionDialog = null;
+  actionDialog.value.open = false;
+  if (resolve) resolve(result);
+};
+
+const cancelActionDialog = () => {
+  finishActionDialog(actionDialog.value.mode === 'input' ? null : false);
+};
 
 const openConsole = () => {
   showConsoleModal.value = true;
@@ -289,6 +414,7 @@ const refreshTableStates = () => {
 const handleResetTableState = (st) => {
   clearTableState(st.server, st.database, st.table);
   refreshTableStates();
+  notifyToast({ type: 'success', title: 'State tabel direset', message: `Riwayat sinkronisasi tabel ${st.table} dihapus.` });
   addLog({
     type: 'info',
     message: `State sync tabel '${st.table}' di-reset. Sync berikutnya akan mengecek dari awal.`,
@@ -299,6 +425,7 @@ const handleResetTableState = (st) => {
 const handleResetAllTableStates = () => {
   clearAllTableStates();
   refreshTableStates();
+  notifyToast({ type: 'success', title: 'Semua state direset', message: 'Seluruh riwayat sinkronisasi tabel telah dihapus.' });
   addLog({
     type: 'warning',
     message: `Semua riwayat sync state tabel berhasil di-reset.`,
@@ -490,6 +617,8 @@ watch(autoSyncInterval, (sec) => {
 
 onUnmounted(() => {
   if (timerId) clearInterval(timerId);
+  toastTimers.forEach((timer) => clearTimeout(timer));
+  toastTimers.clear();
 });
 
 // Fetch list of tables dynamically from remote PMA
@@ -693,7 +822,17 @@ const fetchTablesFromPma = async () => {
       availableTables.value = tables;
       saveTablesForServerKey(currentServerKey.value, tables, selectedTables.value);
       refreshTableStates();
+      notifyToast({
+        type: 'success',
+        title: 'Daftar tabel diperbarui',
+        message: `${tables.length} tabel ditemukan di database ${trimmedDb}.`,
+      });
     } else {
+      notifyToast({
+        type: 'warning',
+        title: 'Tabel tidak ditemukan',
+        message: `Tidak ada tabel yang ditemukan di database ${pmaConfig.value.database}.`,
+      });
       addLog({
         type: 'error',
         message: `Tidak ada tabel yang ditemukan di database '${pmaConfig.value.database}'. Tips: 1) Pastikan penulisan nama database benar (Linux MySQL bersifat case-sensitive). 2) Pastikan user PMA memiliki hak akses SELECT. 3) Klik status PMA di header untuk menguji koneksi terlebih dahulu.`,
@@ -701,6 +840,11 @@ const fetchTablesFromPma = async () => {
       });
     }
   } catch (err) {
+    notifyToast({
+      type: 'error',
+      title: 'Gagal mengambil tabel',
+      message: err.message || String(err),
+    });
     addLog({
       type: 'error',
       message: `Gagal menarik daftar tabel: ${err.message || err}`,
@@ -751,6 +895,7 @@ const testPmaConnection = async () => {
           },
         });
         pmaStatus.value.connected = true;
+        notifyToast({ type: 'success', title: 'PMA terhubung', message: 'Koneksi ke phpMyAdmin berhasil.' });
         addLog({
           type: 'success',
           message: `PMA Remote OK: ${msg}`,
@@ -763,6 +908,7 @@ const testPmaConnection = async () => {
       const client = new PmaClient(pmaConfig.value);
       const res = await client.authenticate();
       pmaStatus.value.connected = true;
+      notifyToast({ type: 'success', title: 'PMA terhubung', message: 'Koneksi ke phpMyAdmin berhasil.' });
       addLog({
         type: 'success',
         message: `PMA Remote OK: ${res.message}`,
@@ -771,6 +917,7 @@ const testPmaConnection = async () => {
     }
   } catch (err) {
     pmaStatus.value.connected = false;
+    notifyToast({ type: 'error', title: 'Koneksi PMA gagal', message: err?.message || String(err) });
     addLog({
       type: 'error',
       message: `Tes PMA Remote Gagal: ${err?.message || err}`,
@@ -808,6 +955,7 @@ const testLocalConnection = async () => {
     });
 
     localStatus.value.connected = true;
+    notifyToast({ type: 'success', title: 'MySQL lokal terhubung', message: 'Koneksi ke database lokal berhasil.' });
     addLog({
       type: 'success',
       message: `MySQL Lokal OK: ${res}`,
@@ -815,6 +963,7 @@ const testLocalConnection = async () => {
     });
   } catch (err) {
     localStatus.value.connected = false;
+    notifyToast({ type: 'error', title: 'Koneksi MySQL gagal', message: err?.message || String(err) });
     addLog({
       type: 'error',
       message: `Tes MySQL Lokal Gagal: ${err.message || err}`,
@@ -841,6 +990,7 @@ const syncProgress = ref({
 const handleStopSync = () => {
   if (activeEngineInstance) {
     activeEngineInstance.stopSync();
+    notifyToast({ type: 'info', title: 'Sinkronisasi dihentikan', message: 'Permintaan berhenti telah dikirim. Data yang sudah tersimpan tetap aman.' });
   }
   // Safety fallback: pastikan state UI kembali responsif dalam 2 detik
   setTimeout(() => {
@@ -861,6 +1011,11 @@ const handleStartSync = async () => {
 
   const expectedTotal = tablesToSync.length;
 
+  notifyToast({
+    type: 'info',
+    title: 'Sinkronisasi dimulai',
+    message: `Memproses ${expectedTotal} tabel dengan mode ${syncMode.value === 'fresh' ? 'Fresh Sync' : 'Sync Server'}.`,
+  });
   isSyncing.value = true;
   syncProgress.value = {
     currentTableIndex: 0,
@@ -916,8 +1071,16 @@ const handleStartSync = async () => {
     if (res && res.success) {
       pmaStatus.value.connected = true;
       localStatus.value.connected = true;
+      notifyToast({
+        type: 'success',
+        title: 'Sinkronisasi selesai',
+        message: `${Number(countSynced).toLocaleString('id-ID')} baris berhasil diproses.`,
+      });
+    } else {
+      notifyToast({ type: 'warning', title: 'Sinkronisasi selesai dengan catatan', message: 'Periksa Console Log untuk detail hasil sinkronisasi.' });
     }
   } catch (err) {
+    notifyToast({ type: 'error', title: 'Sinkronisasi gagal', message: err?.message || String(err) });
     addLog({
       type: 'error',
       message: `Sinkronisasi gagal: ${err?.message || err}`,
