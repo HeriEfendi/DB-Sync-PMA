@@ -130,28 +130,28 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           TARGET="${{ matrix.rust_target }}"
-          APP_PATH="src-tauri/target/${TARGET}/release/bundle/macos/DB-Sync Client.app"
+          APP_PATH="src-tauri/target/${TARGET}/release/bundle/macos/DB Sync Engine PMA.app"
           if [ ! -d "$APP_PATH" ]; then
-            APP_PATH="src-tauri/target/release/bundle/macos/DB-Sync Client.app"
+            APP_PATH="src-tauri/target/release/bundle/macos/DB Sync Engine PMA.app"
           fi
-          
+
           ARCH_LABEL="x64"
           if [ "$TARGET" = "aarch64-apple-darwin" ]; then
             ARCH_LABEL="aarch64"
           fi
-          
+
           DMG_NAME="DB-Sync-Client_${VERSION}_${ARCH_LABEL}.dmg"
           echo "Packaging $APP_PATH into $DMG_NAME..."
-          
+
           DMG_STAGING_DIR="dmg_staging_${ARCH_LABEL}"
           rm -rf "$DMG_STAGING_DIR"
           mkdir -p "$DMG_STAGING_DIR"
           cp -R "$APP_PATH" "$DMG_STAGING_DIR/"
           ln -s /Applications "$DMG_STAGING_DIR/Applications"
-          
-          hdiutil create -volname "DB-Sync Client" -srcfolder "$DMG_STAGING_DIR" -ov -format UDZO "$DMG_NAME"
+
+          hdiutil create -volname "DB Sync Engine PMA" -srcfolder "$DMG_STAGING_DIR" -ov -format UDZO "$DMG_NAME"
           rm -rf "$DMG_STAGING_DIR"
-          
+
           gh release upload "${GITHUB_REF_NAME}" "$DMG_NAME" --clobber
 
       - name: Create and upload Arch Linux package (.pkg.tar.zst)

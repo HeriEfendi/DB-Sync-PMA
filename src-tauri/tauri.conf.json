@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "DB-Sync Client",
+  "productName": "DB Sync Engine PMA",
   "version": "0.25.1",
   "identifier": "com.dbsync.desktopclient",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "DB-Sync Client (PMA to Local MySQL)",
+        "title": "DB Sync Engine PMA (PMA to Local MySQL)",
         "width": 1200,
         "height": 800,
         "minWidth": 900,

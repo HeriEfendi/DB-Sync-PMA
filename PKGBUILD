@@ -1,15 +1,15 @@
 # Maintainer: Heri Efendi <heriefendi@gmail.com>
-pkgname=db-sync-desktop-client
+pkgname=db-sync-pma
 pkgver=0.25.1
 pkgrel=1
-pkgdesc="DB-Sync Client (PMA to Local MySQL)"
+pkgdesc="DB Sync Engine PMA (PMA to Local MySQL)"
 arch=('x86_64')
-url="https://github.com/HeriEfendi/DB-Sync-Desktop-Client"
+url="https://github.com/HeriEfendi/db-sync-pma"
 license=('custom')
 depends=('webkit2gtk-4.1' 'gtk3' 'cairo' 'hicolor-icon-theme' 'openssl')
 makedepends=('nodejs' 'npm' 'cargo' 'rust')
-provides=('db-sync-desktop-client')
-conflicts=('db-sync-desktop-client')
+provides=('db-sync-pma')
+conflicts=('db-sync-pma')
 
 build() {
   cd "$startdir"
@@ -22,16 +22,16 @@ package() {
   cd "$startdir"
   
   # Install binary
-  install -Dm755 "$srcdir/target/release/db-sync-desktop-client" "$pkgdir/usr/bin/db-sync-desktop-client"
+  install -Dm755 "$srcdir/target/release/db-sync-pma" "$pkgdir/usr/bin/db-sync-pma"
   
   # Install desktop application launcher
   install -d "$pkgdir/usr/share/applications"
-  cat <<EOF > "$pkgdir/usr/share/applications/db-sync-desktop-client.desktop"
+  cat <<EOF > "$pkgdir/usr/share/applications/db-sync-pma.desktop"
 [Desktop Entry]
-Name=DB-Sync Client
-Comment=DB-Sync Client (PMA to Local MySQL)
-Exec=db-sync-desktop-client
-Icon=db-sync-desktop-client
+Name=DB Sync Engine PMA
+Comment=DB Sync Engine PMA (PMA to Local MySQL)
+Exec=db-sync-pma
+Icon=db-sync-pma
 Terminal=false
 Type=Application
 Categories=Development;Database;Utility;
@@ -39,9 +39,9 @@ EOF
 
   # Install icons
   if [ -f "src-tauri/icons/128x128.png" ]; then
-    install -Dm644 "src-tauri/icons/128x128.png" "$pkgdir/usr/share/icons/hicolor/128x128/apps/db-sync-desktop-client.png"
+    install -Dm644 "src-tauri/icons/128x128.png" "$pkgdir/usr/share/icons/hicolor/128x128/apps/db-sync-pma.png"
   fi
   if [ -f "src-tauri/icons/32x32.png" ]; then
-    install -Dm644 "src-tauri/icons/32x32.png" "$pkgdir/usr/share/icons/hicolor/32x32/apps/db-sync-desktop-client.png"
+    install -Dm644 "src-tauri/icons/32x32.png" "$pkgdir/usr/share/icons/hicolor/32x32/apps/db-sync-pma.png"
   fi
 }
