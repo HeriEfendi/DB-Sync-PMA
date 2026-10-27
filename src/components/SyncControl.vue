@@ -1,5 +1,5 @@
 <template>
-  <div class="glass-panel sync-control-card">
+  <div data-ui="sync" class="glass-panel sync-control-card">
     <div class="control-grid">
       <div class="main-action">
         <button
@@ -45,6 +45,18 @@
             <option :value="300">Setiap 5 Menit</option>
           </select>
         </div>
+
+        <div v-if="isSyncing" class="sync-status-indicator" role="status">
+          <span class="sync-status-spinner"></span>
+          <span>Sync {{ syncProgress.currentTableIndex }}/{{ syncProgress.totalTables }}</span>
+          <strong>{{ syncProgress.currentTableName || 'Menyiapkan...' }}</strong>
+        </div>
+
+        <button class="btn btn-secondary btn-sm console-trigger" type="button" @click="$emit('open-console')">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+          <span>Console Log</span>
+          <span class="console-count">{{ logCount }}</span>
+        </button>
       </div>
 
       <div class="stats-grid">
@@ -55,7 +67,7 @@
           <span class="stat-label">{{ isSyncing ? 'Baris Masuk (Live)' : 'Total Data Disinkron' }}</span>
         </div>
 
-        <div v-if="isSyncing" class="stat-card stat-live" style="width: 300px;">
+        <div v-if="isSyncing" class="stat-card stat-live stat-card-current-table">
           <span class="stat-value text-cyan">
             {{ formatNumber(syncProgress.currentTableIndex) }} / {{ formatNumber(syncProgress.totalTables) }}
           </span>
@@ -171,6 +183,7 @@
 import { ref, watch, computed, onMounted, onUnmounted } from 'vue';
 const props = defineProps({
   isSyncing: { type: Boolean, default: false },
+  logCount: { type: Number, default: 0 },
   autoSyncInterval: { type: Number, default: 0 },
   syncMode: { type: String, default: 'incremental' },
   rowLimit: { type: Number, default: 0 },
@@ -201,6 +214,7 @@ const props = defineProps({
 const emit = defineEmits([
   'start-sync',
   'stop-sync',
+  'open-console',
   'update:autoSyncInterval',
   'update:sync-mode',
   'update:row-limit',
@@ -342,414 +356,3 @@ const formatDuration = (ms) => {
   return `${minutes}m ${seconds}d`;
 };
 </script>
-
-<style scoped>
-.sync-control-card {
-  padding: 18px 24px 22px;
-  position: relative;
-  overflow: hidden;
-  min-height: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.btn-danger {
-  background: linear-gradient(135deg, #ef4444, #dc2626) !important;
-  color: white !important;
-  border: 1px solid rgba(239, 68, 68, 0.5) !important;
-  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4);
-  transition: all 0.2s ease;
-}
-
-.btn-danger:hover {
-  background: linear-gradient(135deg, #dc2626, #b91c1c) !important;
-  box-shadow: 0 6px 18px rgba(239, 68, 68, 0.6);
-  transform: translateY(-1px);
-}
-
-.control-grid {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 24px;
-  flex-wrap: wrap;
-}
-
-.main-action {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.auto-sync-box {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: rgba(15, 23, 42, 0.6);
-  padding: 6px 12px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-color);
-}
-
-.auto-sync-label {
-  font-size: 0.8rem;
-  color: var(--text-muted);
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.interval-select {
-  padding: 0px 2px;
-  font-size: 0.8rem;
-  width: auto;
-  border: none;
-  background: transparent;
-  color: #111827;
-}
-
-.interval-select option {
-  color: #111827;
-}
-
-.sync-options-card,
-.sync-settings-box {
-  background: rgba(15, 23, 42, 0.5);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 10px 14px;
-  width: 100%;
-}
-
-.options-row,
-.sync-settings-row {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  flex-wrap: wrap;
-}
-
-.option-inline {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.stat-label {
-  min-width: 0;
-}
-
-.table-name-truncated {
-  display: inline-block;
-  max-width: 12rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  vertical-align: bottom;
-}
-
-.option-title {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.radio-label-inline {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  font-size: 0.82rem;
-  color: var(--text-main);
-  padding: 5px 10px;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
-  white-space: nowrap;
-  transition: all 0.15s ease;
-}
-
-.radio-label-inline:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.radio-label-inline.warning-radio {
-  border-color: rgba(245, 158, 11, 0.3);
-}
-
-.limit-select {
-  padding: 0px 2px;
-  font-size: 0.8rem;
-  width: auto;
-  min-width: 160px;
-  max-width: 260px;
-  color: #111827;
-}
-
-.limit-select option {
-  color: #111827;
-}
-
-.stats-grid {
-  display: flex;
-  gap: 14px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  align-items: stretch;
-}
-
-.stat-card {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  background: rgba(15, 23, 42, 0.4);
-  padding: 8px 14px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-color);
-  min-width: 130px;
-  transition: all 0.2s ease;
-}
-
-.stat-highlight {
-  border-color: rgba(16, 185, 129, 0.4);
-  background: rgba(16, 185, 129, 0.08);
-}
-
-.stat-live {
-  border-color: rgba(6, 182, 212, 0.4);
-  background: rgba(6, 182, 212, 0.08);
-}
-
-.stat-value {
-  font-size: 1.15rem;
-  font-weight: 700;
-  font-family: 'JetBrains Mono', monospace;
-}
-
-.stat-label {
-  font-size: 0.72rem;
-  color: var(--text-muted);
-  white-space: nowrap;
-}
-
-.text-emerald { color: var(--accent-emerald); }
-.text-cyan { color: var(--accent-cyan); }
-.text-amber { color: var(--accent-amber); }
-.text-white { color: #ffffff; }
-.font-bold { font-weight: 600; }
-
-.sync-live-banner {
-  width: 100%;
-  padding: 10px 14px;
-  background: rgba(15, 23, 42, 0.75);
-  border-radius: var(--radius-md);
-  border: 1px solid rgba(6, 182, 212, 0.35);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-}
-
-.sync-live-content {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-width: 0;
-}
-
-.live-status-text {
-  font-size: 0.83rem;
-  color: var(--text-main);
-  line-height: 1.4;
-  word-break: break-word;
-  flex: 1;
-}
-
-.badge-accent {
-  color: var(--accent-cyan);
-  background: rgba(6, 182, 212, 0.15);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-weight: 600;
-}
-
-.badge-tableName {
-  color: #a7f3d0;
-  background: rgba(16, 185, 129, 0.15);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-family: 'JetBrains Mono', monospace;
-}
-
-.pulse-dot {
-  width: 9px;
-  height: 9px;
-  flex: 0 0 9px;
-  border-radius: 50%;
-  background: #10b981;
-  box-shadow: 0 0 10px #10b981;
-  animation: pulse-glow 1.5s infinite;
-}
-
-.progress-bar-container {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 4px;
-  background: rgba(255, 255, 255, 0.1);
-  overflow: hidden;
-}
-
-.progress-bar-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--primary), var(--accent-cyan), var(--accent-emerald));
-  transition: width 0.3s ease;
-}
-
-@keyframes pulse-glow {
-  0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 10px #10b981; }
-  50% { opacity: 0.4; transform: scale(0.85); box-shadow: 0 0 3px #10b981; }
-}
-
-.sync-states-card {
-  margin-top: 8px;
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: var(--radius-md);
-  padding: 12px 14px;
-}
-
-.states-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.states-toggle {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-width: 0;
-  padding: 2px 0;
-  color: var(--text-muted);
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-  text-align: left;
-}
-
-.states-toggle:focus-visible {
-  outline: 2px solid var(--accent-cyan);
-  outline-offset: 3px;
-  border-radius: 4px;
-}
-
-.states-title-wrap {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--text-muted);
-}
-
-.state-count {
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: rgba(56, 189, 248, 0.12);
-  color: var(--accent-cyan);
-  font-size: 0.7rem;
-  font-weight: 700;
-}
-
-.toggle-chevron {
-  flex: 0 0 auto;
-  transition: transform 0.2s ease;
-}
-
-.toggle-chevron.open {
-  transform: rotate(180deg);
-}
-
-.states-title {
-  font-size: 0.78rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.text-rose { color: var(--accent-rose); }
-
-.states-table-wrapper {
-  max-height: 240px;
-  overflow-y: auto;
-  overflow-x: auto;
-  overscroll-behavior: contain;
-  transform: translateZ(0);
-  contain: content;
-  -webkit-overflow-scrolling: touch;
-}
-
-.states-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.76rem;
-  text-align: left;
-}
-
-.states-table th,
-.states-table td {
-  padding: 6px 10px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.states-table th {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  background: #0e1526;
-  color: var(--text-dim);
-  font-weight: 600;
-  text-transform: uppercase;
-  font-size: 0.68rem;
-  letter-spacing: 0.03em;
-}
-
-.states-table tr:hover td {
-  background: rgba(255, 255, 255, 0.03);
-}
-
-/* Sentinel div untuk IntersectionObserver — tidak terlihat */
-.scroll-sentinel {
-  height: 1px;
-  width: 100%;
-}
-
-.load-more-hint {
-  text-align: center;
-  padding: 5px 10px;
-  font-size: 0.7rem;
-  color: var(--text-dim);
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(10, 17, 35, 0.4);
-  position: sticky;
-  bottom: 0;
-}
-
-@media (max-width: 768px) {
-  .control-grid {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .stats-grid {
-    justify-content: space-between;
-  }
-  .stat-card {
-    flex: 1;
-    min-width: 100px;
-  }
-}
-</style>

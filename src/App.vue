@@ -7,26 +7,29 @@
 
     <div class="desktop-frame">
       <section class="desktop-content">
-        <Navbar :pma-status="pmaStatus" :local-status="localStatus" :is-syncing="isSyncing" :app-version="appVersion" @trigger-sync="handleStartSync" />
+        <Navbar
+          :pma-status="pmaStatus"
+          :local-status="localStatus"
+          :is-syncing="isSyncing"
+          :app-version="appVersion"
+          :testing-pma="testingPma"
+          :testing-local="testingLocal"
+          :selected-preset="currentPresetName"
+          :preset-options="connectionConfigRef?.presets"
+          :remote-database="pmaConfig.database"
+          :local-database="localConfig.database"
+          :can-delete-profile="Boolean(currentPresetName)"
+          @trigger-sync="handleStartSync"
+          @test-pma="testPmaConnection"
+          @test-local="testLocalConnection"
+          @select-preset="connectionConfigRef?.selectPreset($event)"
+          @edit-config="showConnectionModal = true"
+          @create-profile="connectionConfigRef?.createPreset()"
+          @delete-profile="connectionConfigRef?.deletePreset()"
+        />
 
         <main class="dashboard-body">
-          <div class="workspace-heading">
-            <div><span class="eyebrow">WORKSPACE / OVERVIEW</span><h1>Database sync workspace</h1><p>Kelola koneksi, tabel, dan proses sinkronisasi dari satu tempat.</p></div>
-            <div class="heading-meta"><span class="live-indicator"></span> Live workspace</div>
-          </div>
-
-          <div class="config-stack">
-            <ConnectionConfigSection
-              v-model:pma-config="pmaConfig"
-              v-model:local-config="localConfig"
-              v-model:selected-preset="currentPresetName"
-              :testing-pma="testingPma"
-              :testing-local="testingLocal"
-              @test-pma="testPmaConnection"
-              @test-local="testLocalConnection"
-              @preset-changed="handlePresetChanged"
-            />
-
+          <div class="workflow-grid">
             <TableConfig
               :server-key="currentServerKey"
               v-model:selected-tables="selectedTables"
@@ -38,6 +41,7 @@
 
             <SyncControl
               :is-syncing="isSyncing"
+              :log-count="logs.length"
               v-model:auto-sync-interval="autoSyncInterval"
               :sync-mode="syncMode"
               :row-limit="rowLimit"
@@ -50,14 +54,67 @@
               @update:row-limit="rowLimit = Number.isFinite(Number($event)) ? Number($event) : 0"
               @reset-table-state="handleResetTableState"
               @reset-all-table-states="handleResetAllTableStates"
+              @open-console="openConsole"
             />
           </div>
 
-          <div class="grid-bottom">
-            <LogConsole :logs="logs" @clear-logs="logs = []" />
+          <div v-show="showConnectionModal" class="connection-modal-backdrop" @click.self="showConnectionModal = false">
+            <section class="connection-modal" role="dialog" aria-modal="true" aria-labelledby="connection-modal-title" tabindex="-1">
+              <header class="dialog-titlebar">
+                <div>
+                  <span class="eyebrow">PREFERENSI</span>
+                  <h2 id="connection-modal-title">Konfigurasi koneksi</h2>
+                </div>
+                <button class="window-control" type="button" aria-label="Tutup konfigurasi" @click="showConnectionModal = false">×</button>
+              </header>
+              <div class="connection-modal-content">
+                <ConnectionConfigSection
+                  ref="connectionConfigRef"
+                  v-model:pma-config="pmaConfig"
+                  v-model:local-config="localConfig"
+                  v-model:selected-preset="currentPresetName"
+                  @test-pma="testPmaConnection"
+                  @test-local="testLocalConnection"
+                  @preset-changed="handlePresetChanged"
+                />
+              </div>
+            </section>
+          </div>
+
+          <div v-if="showConsoleModal" v-show="!consoleMinimized" class="console-modal-backdrop">
+            <section class="console-dialog" role="dialog" aria-modal="true" aria-label="Console log sinkronisasi">
+              <header class="floating-console-titlebar">
+                <div class="floating-console-title">
+                  <span class="console-live-dot" :class="{ active: isSyncing }"></span>
+                  <strong>Console Log</strong>
+                  <span class="console-count">{{ logs.length }} entri</span>
+                </div>
+                <div class="window-controls">
+                  <button class="window-control" type="button" aria-label="Minimalkan console" title="Minimalkan" @click="consoleMinimized = true">−</button>
+                  <button class="window-control" type="button" aria-label="Tutup console; sinkronisasi tetap berjalan" title="Tutup" @click="showConsoleModal = false">×</button>
+                </div>
+              </header>
+              <div class="floating-console-content">
+                <LogConsole :logs="logs" @clear-logs="logs = []" />
+              </div>
+            </section>
+          </div>
+
+          <div v-if="showConsoleModal" v-show="consoleMinimized" class="console-minimized-dock" role="region" aria-label="Console log diminimalkan">
+            <header class="floating-console-titlebar">
+              <div class="floating-console-title">
+                <span class="console-live-dot" :class="{ active: isSyncing }"></span>
+                <strong>Console Log</strong>
+                <span class="console-count">{{ logs.length }} entri</span>
+              </div>
+              <div class="window-controls">
+                <button class="window-control" type="button" aria-label="Buka kembali console" title="Buka kembali" @click="consoleMinimized = false">□</button>
+                <button class="window-control" type="button" aria-label="Tutup console; sinkronisasi tetap berjalan" title="Tutup" @click="showConsoleModal = false">×</button>
+              </div>
+            </header>
           </div>
         </main>
-        <footer class="status-bar"><span><i class="status-dot"></i> Ready</span><span>Local workspace</span><span class="status-spacer"></span><span>UTF-8</span><span>v{{ appVersion }}</span></footer>
+        <footer class="status-bar"><span><i class="status-dot" :class="{ busy: isSyncing }"></i>{{ isSyncing ? 'Sinkronisasi berjalan' : 'Siap' }}</span><span>Local workspace</span><span class="status-spacer"></span><span>UTF-8</span><span>v{{ appVersion }}</span></footer>
       </section>
     </div>
   </div>
@@ -115,8 +172,21 @@ const testingLocal = ref(false);
 const fetchingTables = ref(false);
 
 const isSyncing = ref(false);
+const showConnectionModal = ref(false);
+const showConsoleModal = ref(false);
+const consoleMinimized = ref(false);
+const connectionConfigRef = ref(null);
 const autoSyncInterval = ref(0);
 let timerId = null;
+
+const openConsole = () => {
+  showConsoleModal.value = true;
+  consoleMinimized.value = false;
+};
+
+watch(isSyncing, (syncing, wasSyncing) => {
+  if (syncing && !wasSyncing) openConsole();
+});
 
 const logs = ref([]);
 
@@ -626,7 +696,7 @@ const fetchTablesFromPma = async () => {
     } else {
       addLog({
         type: 'error',
-        message: `Tidak ada tabel yang ditemukan di database '${pmaConfig.value.database}'. Tips: 1) Pastikan penulisan nama database benar (Linux MySQL bersifat case-sensitive). 2) Pastikan user PMA memiliki hak akses SELECT. 3) Jalankan tombol 'Tes Koneksi PMA' terlebih dahulu.`,
+        message: `Tidak ada tabel yang ditemukan di database '${pmaConfig.value.database}'. Tips: 1) Pastikan penulisan nama database benar (Linux MySQL bersifat case-sensitive). 2) Pastikan user PMA memiliki hak akses SELECT. 3) Klik status PMA di header untuk menguji koneksi terlebih dahulu.`,
         timestamp: new Date().toLocaleTimeString(),
       });
     }
@@ -860,11 +930,3 @@ const handleStartSync = async () => {
   }
 };
 </script>
-
-<style>
-.app-layout { display:flex; flex-direction:column; width:100%; height:100vh; min-width:0; overflow:hidden; }
-.desktop-frame { flex:1 1 auto; width:100%; min-width:0; }
-.desktop-content { width:100%; min-width:0; }
-.browser-banner { flex:0 0 auto; }
-</style>
-

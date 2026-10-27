@@ -1,5 +1,5 @@
 <template>
-  <header class="navbar">
+  <header data-ui="navbar" class="navbar">
     <div class="nav-brand">
       <div class="logo-icon">
         <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -16,18 +16,44 @@
 
     <div class="nav-status">
       <!-- Remote PMA Badge -->
-      <div class="status-pill" :class="pmaStatus.connected ? 'pill-success' : 'pill-muted'">
-        <span class="dot" :class="{ pulse: pmaStatus.connected }"></span>
+      <button class="status-pill" :class="pmaStatus.connected ? 'pill-success' : 'pill-muted'" type="button" :disabled="testingPma" title="Klik untuk mengetes koneksi PMA" @click="$emit('test-pma')">
+        <span v-if="testingPma" class="spin-sm"></span>
+        <span v-else class="dot" :class="{ pulse: pmaStatus.connected }"></span>
         <span class="label">PMA:</span>
         <span class="value">{{ pmaStatus.connected ? 'Terhubung' : 'Terputus' }}</span>
-      </div>
+      </button>
 
       <!-- Local MySQL Badge -->
-      <div class="status-pill" :class="localStatus.connected ? 'pill-success' : 'pill-muted'">
-        <span class="dot" :class="{ pulse: localStatus.connected }"></span>
+      <button class="status-pill" :class="localStatus.connected ? 'pill-success' : 'pill-muted'" type="button" :disabled="testingLocal" title="Klik untuk mengetes koneksi MySQL lokal" @click="$emit('test-local')">
+        <span v-if="testingLocal" class="spin-sm"></span>
+        <span v-else class="dot" :class="{ pulse: localStatus.connected }"></span>
         <span class="label">MySQL Lokal:</span>
         <span class="value">{{ localStatus.connected ? 'Terhubung' : 'Terputus' }}</span>
-      </div>
+      </button>
+    </div>
+
+    <div class="nav-profile">
+      <p class="profile-route">
+        {{ remoteDatabase || 'Remote belum diatur' }}
+        <span aria-hidden="true">→</span>
+        {{ localDatabase || 'Lokal belum diatur' }}
+      </p>
+      <label class="sr-only" for="main-connection-select">Pilih koneksi database</label>
+      <select
+        id="main-connection-select"
+        class="profile-select"
+        :value="selectedPreset"
+        @change="$emit('select-preset', $event.target.value)"
+      >
+        <option v-if="!selectedPreset" value="" disabled>Pilih koneksi tersimpan</option>
+        <option v-for="(preset, name) in presetOptions" :key="name" :value="name">{{ name }}</option>
+      </select>
+    </div>
+
+    <div class="profile-actions">
+      <button class="btn btn-secondary btn-sm" type="button" @click="$emit('edit-config')">Edit Koneksi</button>
+      <button class="btn btn-primary btn-sm" type="button" @click="$emit('create-profile')">Buat Profil</button>
+      <button class="btn btn-danger btn-sm" type="button" :disabled="!canDeleteProfile" @click="$emit('delete-profile')">Hapus</button>
     </div>
   </header>
 </template>
@@ -53,115 +79,16 @@ const props = defineProps({
     type: String,
     default: '',
   },
+  testingPma: { type: Boolean, default: false },
+  testingLocal: { type: Boolean, default: false },
+  selectedPreset: { type: String, default: '' },
+  presetOptions: { type: Object, default: () => ({}) },
+  remoteDatabase: { type: String, default: '' },
+  localDatabase: { type: String, default: '' },
+  canDeleteProfile: { type: Boolean, default: false },
 });
 
 const displayVersion = computed(() => props.appVersion || packageJson.version);
 
-defineEmits(['trigger-sync']);
+defineEmits(['trigger-sync', 'test-pma', 'test-local', 'select-preset', 'edit-config', 'create-profile', 'delete-profile']);
 </script>
-
-<style scoped>
-.navbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 24px;
-  background: #11141b;
-  border-bottom: 1px solid var(--border-color);
-  transform: translateZ(0);
-  z-index: 10;
-}
-
-.nav-brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.logo-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #6b74ff 0%, #42c3ec 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  box-shadow: 0 4px 14px rgba(107, 116, 255, 0.3);
-}
-
-.brand-title {
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: var(--text-main);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.badge-tag {
-  font-size: 0.7rem;
-  padding: 2px 6px;
-  background: rgba(99, 102, 241, 0.2);
-  color: var(--primary);
-  border-radius: 4px;
-}
-
-.brand-subtitle {
-  font-size: 0.76rem;
-  color: var(--text-muted);
-}
-
-.nav-status {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.status-pill {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
-  border-radius: 20px;
-  font-size: 0.78rem;
-  background: rgba(30, 41, 59, 0.8);
-  border: 1px solid var(--border-color);
-}
-
-.pill-success {
-  border-color: rgba(16, 185, 129, 0.4);
-  color: var(--accent-emerald);
-}
-
-.pill-muted {
-  color: var(--text-dim);
-}
-
-.dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: currentColor;
-}
-
-.dot.pulse {
-  animation: pulse-dot 1.5s infinite ease-in-out;
-}
-
-.label {
-  color: var(--text-muted);
-}
-
-.value {
-  font-weight: 600;
-}
-
-.spin {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  100% { transform: rotate(360deg); }
-}
-</style>

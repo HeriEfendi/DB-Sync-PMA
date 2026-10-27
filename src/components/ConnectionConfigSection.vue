@@ -1,5 +1,5 @@
 <template>
-  <div class="glass-panel config-card">
+  <div data-ui="connection" class="glass-panel config-card">
     <div class="card-header">
       <div class="title-wrap">
         <h3>Konfigurasi Database</h3>
@@ -7,19 +7,8 @@
       </div>
 
       <div class="preset-controls">
-        <select v-model="selectedPresetName" class="form-select preset-select" @change="loadPreset" style="background-color: #111827 !important; color: #ffffff !important; color-scheme: dark;">
-          <option value="">-- Pilih Profil Preset --</option>
-          <option v-for="(p, key) in presets" :key="key" :value="key">{{ key }}</option>
-        </select>
-
         <button class="btn btn-secondary btn-sm" title="Simpan perubahan ke preset yang dipilih" :disabled="!selectedPresetName" @click="updatePreset">
           Simpan
-        </button>
-        <button class="btn btn-primary btn-sm" title="Buat preset baru dari konfigurasi saat ini" @click="createPreset">
-          Buat
-        </button>
-        <button class="btn btn-danger btn-sm" title="Hapus preset yang dipilih" :disabled="!selectedPresetName" @click="deletePreset">
-          Hapus
         </button>
       </div>
     </div>
@@ -60,12 +49,6 @@
         </div>
       </div>
 
-      <div class="action-bar">
-        <button class="btn btn-secondary btn-sm" :disabled="testingPma" @click="$emit('test-pma')">
-          <span v-if="testingPma" class="spin-sm"></span>
-          <span>Tes Koneksi PMA</span>
-        </button>
-      </div>
     </div>
 
     <div v-show="activeTab === 'local'" class="tab-content">
@@ -95,18 +78,18 @@
         </div>
       </div>
 
-      <div class="form-row docker-row" style="margin-top: 6px; padding-top: 10px; border-top: 1px dashed rgba(255, 255, 255, 0.08); align-items: flex-start;">
+      <div class="form-row docker-row">
         <div class="form-group flex-1">
-          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;">
+          <label class="docker-toggle-label">
             <input
               v-model="localConfig.use_docker"
               type="checkbox"
-              style="cursor: pointer; accent-color: #3b82f6; width: 15px; height: 15px;"
+              class="docker-toggle-input"
               @change="$emit('update:local-config', localConfig)"
             />
-            <span style="font-size: 0.8rem; font-weight: 550; color: var(--text-main, #e5e7eb);">Gunakan Docker Container (docker exec)</span>
+            <span class="docker-toggle-title">Gunakan Docker Container (docker exec)</span>
           </label>
-          <p style="font-size: 0.72rem; color: var(--text-muted, #9ca3af); margin-top: 4px; margin-bottom: 0;">
+          <p class="docker-help">
             Gunakan opsi ini jika MySQL berjalan di Docker dan OS host tidak memiliki client CLI 'mysql'.
           </p>
         </div>
@@ -122,12 +105,6 @@
         </div>
       </div>
 
-      <div class="action-bar">
-        <button class="btn btn-secondary btn-sm" :disabled="testingLocal" @click="$emit('test-local')">
-          <span v-if="testingLocal" class="spin-sm"></span>
-          <span>Tes Koneksi MySQL Rust</span>
-        </button>
-      </div>
     </div>
   </div>
 </template>
@@ -139,8 +116,6 @@ const props = defineProps({
   pmaConfig: { type: Object, required: true },
   localConfig: { type: Object, required: true },
   selectedPreset: { type: String, default: '' },
-  testingPma: { type: Boolean, default: false },
-  testingLocal: { type: Boolean, default: false },
 });
 
 const emit = defineEmits([
@@ -270,119 +245,11 @@ const loadPreset = async () => {
   emit('test-pma');
   emit('test-local');
 };
+
+const selectPreset = async (name) => {
+  selectedPresetName.value = name;
+  await loadPreset();
+};
+
+defineExpose({ presets, selectPreset, createPreset, updatePreset, deletePreset });
 </script>
-
-<style scoped>
-.config-card {
-  padding: 20px;
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-}
-
-.title-wrap h3 {
-  font-size: 1.05rem;
-  font-weight: 600;
-}
-
-.subtitle {
-  font-size: 0.78rem;
-  color: var(--text-muted);
-}
-
-.preset-controls {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.preset-select {
-  padding: 0px 2px;
-  font-size: 0.8rem;
-  width: auto;
-  max-width: 180px;
-  color: #111827;
-}
-
-.preset-select option {
-  color: #111827;
-}
-
-.btn-sm {
-  padding: 6px 12px;
-  font-size: 0.78rem;
-}
-
-.tab-header {
-  display: flex;
-  gap: 3px;
-  padding: 3px;
-  background: #101217;
-  border-radius: 6px;
-  margin-bottom: 16px;
-}
-
-.tab-btn {
-  flex: 1;
-  padding: 8px 10px;
-  background: transparent;
-  border: 0;
-  border-radius: 4px;
-  color: var(--text-muted);
-  font-size: 0.72rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-}
-
-.tab-btn.active {
-  background: #252a34;
-  color: var(--text-main);
-}
-
-.form-row {
-  display: flex;
-  gap: 12px;
-}
-
-.flex-1 { flex: 1; }
-.flex-2 { flex: 2; }
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 14px;
-}
-
-.form-label {
-  font-size: 0.72rem;
-  font-weight: 550;
-  color: var(--text-muted);
-}
-
-.action-bar {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 12px;
-}
-
-.spin-sm {
-  width: 12px;
-  height: 12px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top-color: white;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  100% { transform: rotate(360deg); }
-}
-</style>

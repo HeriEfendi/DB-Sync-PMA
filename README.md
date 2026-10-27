@@ -1,6 +1,6 @@
 # 🗄️ DB-Sync Desktop Client
 
-![Version](https://img.shields.io/badge/version-0.24.3-emerald)
+![Version](https://img.shields.io/badge/version-0.25.1-emerald)
 ![Tauri](https://img.shields.io/badge/Tauri-v2-blue?logo=tauri)
 ![Vue](https://img.shields.io/badge/Vue.js-3.5-brightgreen?logo=vuedotjs)
 ![Rust](https://img.shields.io/badge/Rust-2021-orange?logo=rust)
@@ -39,8 +39,44 @@ Aplikasi dirancang untuk menangani database skala kecil hingga besar (~5+ GB) de
 - 📋 **Multi-Table Selection & Templates**: Cari tabel, centang massal, input tabel manual, serta simpan _template centangan tabel_ untuk digunakan kembali.
 - 🎚️ **Row Limit Terbaru**: Opsi membatasi jumlah baris per tabel (berguna untuk sampling data dev/staging) dengan pengurutan `ORDER BY primary_key DESC LIMIT N`.
 - ⏱️ **Auto-Sync & Live Statistics**: Pengulangan otomatis berkala (5 detik hingga 5 menit), penghitung baris masuk live, throughput kecepatan transfer (MB/s), serta tombol pembatalan aman (_Stop Sync_).
-- 🧾 **Per-Table Sync State**: Riwayat watermark tersimpan per tabel di `localStorage`. Dilengkapi modal untuk meninjau dan mereset watermark per tabel atau seluruhnya.
-- 🧪 **Dual Connection Tester**: Validasi koneksi PMA remote dan MySQL lokal (TCP socket + uji kontainer Docker) sebelum sinkronisasi dimulai.
+- 🧾 **Per-Table Sync State**: Riwayat watermark tersimpan per tabel di `localStorage`. Panel state dapat dibuka untuk meninjau dan mereset watermark per tabel atau seluruhnya.
+- 🧪 **Dual Connection Tester**: Klik indikator PMA atau MySQL Lokal di header untuk menguji koneksi. Pemilihan profil juga menjalankan tes koneksi untuk kedua sisi.
+
+---
+
+## 🖥️ Antarmuka Desktop
+
+Antarmuka utama menggabungkan informasi aplikasi, koneksi, profil aktif, dan aksi profil dalam satu toolbar. Di bawahnya terdapat daftar tabel dan panel kontrol sinkronisasi.
+
+### Toolbar utama
+
+Urutan toolbar dari kiri ke kanan:
+
+1. **Identitas aplikasi**: ikon, nama DB-Sync, dan versi.
+2. **Status koneksi**: indikator **PMA** dan **MySQL Lokal**. Klik indikator untuk menjalankan tes; spinner tampil selama pemeriksaan.
+3. **Profil database**: pilih koneksi tersimpan lewat dropdown. Di sebelahnya terlihat rute database remote ke lokal.
+4. **Aksi profil**: **Edit Koneksi**, **Buat Profil**, dan **Hapus**.
+
+**Edit Koneksi** membuka dialog konfigurasi dengan tab untuk PMA Remote dan MySQL Lokal. Tombol **Simpan** di dialog memperbarui profil yang sedang aktif. Aksi **Buat Profil** menyimpan konfigurasi saat ini; **Hapus** menghapus profil terpilih.
+
+### Daftar tabel
+
+- **Ambil Tabel** mengambil daftar dari database remote. Nama tabel juga dapat dimasukkan manual.
+- Gunakan pencarian, centang satu per satu, **Centang Semua**, atau **Hapus Centang**.
+- Template menyimpan dan memuat pilihan tabel untuk digunakan kembali.
+- Kartu tabel ditampilkan maksimal tiga kolom. Daftar memiliki scroll internal dan menyesuaikan tinggi jendela agar panel sinkronisasi tetap terlihat.
+
+### Sinkronisasi dan log
+
+- Pilih mode **Sync Server (New & Update)** atau **Fresh Sync**, batas baris, dan interval otomatis.
+- Panel sinkronisasi menampilkan statistik, progres tabel, dan _sync state_. Panel state dapat dibuka untuk meninjau atau mereset watermark.
+- Tombol **Console Log** berada di panel sinkronisasi. Dialog log muncul otomatis saat proses dimulai, berada di tengah layar dengan latar blur, dan dapat diminimalkan atau ditutup tanpa menghentikan sinkronisasi.
+- Indikator proses serta progres tetap terlihat di halaman utama saat dialog log ditutup atau diminimalkan.
+- Console mendukung filter level, pencarian, salin, dan bersihkan log.
+
+### Styling frontend
+
+Frontend menggunakan **Tailwind CSS 3**. Aturan UI dan kelas komponen dikelola di satu file, [`src/styles/main.css`](src/styles/main.css), menggunakan directive Tailwind dan `@apply`. Konfigurasi Tailwind ada di [`tailwind.config.js`](tailwind.config.js), sedangkan pipeline PostCSS ada di [`postcss.config.js`](postcss.config.js).
 
 > [!WARNING]
 > **Mode Sync Server (New & Update) menghapus baris lokal dengan ID di atas `Last ID`.** Mode ini dirancang jika server remote adalah sumber kebenaran (_single source of truth_). Jangan gunakan pada tabel yang memiliki data lokal-only yang ingin dipertahankan.
@@ -108,14 +144,14 @@ Aplikasi dirancang untuk menangani database skala kecil hingga besar (~5+ GB) de
 | :------------------- | :-------------------------------------------- | :-------------------------------------------------------------- |
 | **Frontend UI**      | **Vue 3** (Composition API `<script setup>`)  | Antarmuka interaktif dan responsif                              |
 | **Build Tool**       | **Vite v6**                                   | Kompilasi frontend ultra-cepat                                  |
-| **Styling**          | **Vanilla CSS + Glassmorphism Tokens**        | Tema gelap modern, responsif, dan ringan tanpa dependensi berat |
-| **Iconography**      | **Lucide Vue Next**                           | Icon set modern dan konsisten                                   |
+| **Styling**          | **Tailwind CSS 3 + stylesheet terpusat**      | Kelas UI dan aturan komponen dikelola dari satu file            |
+| **Iconography**      | **SVG inline**                                | Ikon UI disematkan langsung pada komponen Vue                    |
 | **Desktop Core**     | **Tauri v2**                                  | Framework aplikasi desktop native lintas platform               |
 | **Backend Engine**   | **Rust (Edition 2021)**                       | Logika sinkronisasi native memori aman berkecepatan tinggi      |
 | **CSV Processing**   | **csv 1.4 / csv-core**                        | Parsing data CSV tabular streaming ultra-cepat di sisi client   |
 | **Database Client**  | **sqlx 0.8** (Tokio Async, Native TLS, MySQL) | Driver MySQL TCP async untuk inspeksi tabel & query lokal       |
 | **HTTP & Streaming** | **reqwest / flate2 / urlencoding**            | Client HTTP cookie-store, streaming dekompresi GZIP real-time   |
-| **IPC & Serde**      | **serde / serde_json / tauri-macros**         | Komunikasi data asinkron antara UI Vue dan backend Rust         |omunikasi data asinkron antara UI Vue dan backend Rust         |
+| **IPC & Serde**      | **serde / serde_json / tauri-macros**        | Komunikasi data asinkron antara UI Vue dan backend Rust         |
 
 ---
 
@@ -177,11 +213,11 @@ npm run tauri dev
 
 ### 3. Profil Preset Database
 
-Anda dapat menyimpan konfigurasi lengkap (PMA Remote + MySQL Lokal) ke dalam preset:
+Pilih profil koneksi aktif dari dropdown pada toolbar utama. Untuk mengubah detailnya, buka **Edit Koneksi**. Aksi profil tersedia di toolbar:
 
-- **Buat**: Simpan konfigurasi form saat ini sebagai preset baru.
-- **Simpan**: Perbarui preset yang sedang dipilih.
-- **Hapus**: Hapus preset dari daftar.
+- **Buat Profil**: Simpan konfigurasi saat ini sebagai profil baru.
+- **Simpan**: Di dialog konfigurasi, perbarui profil yang sedang dipilih.
+- **Hapus**: Hapus profil aktif dari daftar.
 
 ### 4. Mode Sinkronisasi
 
@@ -198,7 +234,7 @@ Anda dapat menyimpan konfigurasi lengkap (PMA Remote + MySQL Lokal) ke dalam pre
 
 - **Penyebab**: Aplikasi mencoba mengeksekusi binary `mysql` CLI pada OS host, namun tool client MySQL belum terinstall di PATH sistem.
 - **Solusi**:
-  - **Jika memakai Docker**: Di tab _MySQL Lokal_, centang **Gunakan Docker Container (docker exec)** dan isi nama kontainer MySQL Anda.
+  - **Jika memakai Docker**: Buka **Edit Koneksi** → tab _MySQL Lokal_, centang **Gunakan Docker Container (docker exec)**, lalu isi nama kontainer MySQL Anda.
   - **Jika tanpa Docker**: Install client CLI ringan di OS Anda:
     - Ubuntu/Debian: `sudo apt install default-mysql-client`
     - Arch Linux: `sudo pacman -S mariadb-clients`
@@ -211,7 +247,7 @@ Anda dapat menyimpan konfigurasi lengkap (PMA Remote + MySQL Lokal) ke dalam pre
 ### 3. Error `Session Expired` atau `CSRF Token Invalid`
 
 - **Penyebab**: Sesi login phpMyAdmin remote telah habis masa berlakunya atau server menerapkan proteksi IP/Cookie yang ketat.
-- **Solusi**: Jalankan ulang tombol _"Tes Koneksi PMA"_ untuk memperbarui sesi cookie dan CSRF token baru.
+- **Solusi**: Klik indikator **PMA** di header untuk menguji ulang koneksi dan memperbarui sesi cookie serta CSRF token.
 
 ---
 
@@ -236,8 +272,8 @@ npm run build:pacman
 Gunakan skrip rilis untuk memperbarui seluruh file versi manifest secara serentak dan memicu build multi-platform otomatis:
 
 ```bash
-# Contoh merilis versi 0.22.1
-npm run release 0.22.1
+# Contoh merilis versi berikutnya
+npm run release 0.25.1
 ```
 
 ---
