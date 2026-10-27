@@ -27,7 +27,7 @@ Aplikasi dirancang untuk menangani database skala kecil hingga besar (~5+ GB) de
   - Chunking tabel skala besar tidak menggunakan `OFFSET` besar yang membebani I/O disk server.
   - Nilai Primary Key terakhir diambil langsung dari baris CSV, dan chunk berikutnya mengambil data secara instan via B-Tree index: `WHERE pk > last_id ORDER BY pk ASC LIMIT 100000`.
 - ⏱️ **Adaptive Throttling & Micro-Pause**:
-  - Jeda napas mikro (250ms) antar-chunk dan jeda inter-tabel (300ms–500ms) memberikan waktu bagi CPU server remote untuk kembali idle, menjaga *Load Average* server tetap rendah dan mencegah throttle CloudLinux LVE / alert admin server.
+  - Jeda napas mikro (250ms) antar-chunk dan jeda inter-tabel (300ms–500ms) memberikan waktu bagi CPU server remote untuk kembali idle, menjaga _Load Average_ server tetap rendah dan mencegah throttle CloudLinux LVE / alert admin server.
 - 🏗️ **Skema DDL Pre-fetch**: Struktur tabel (`CREATE TABLE IF NOT EXISTS`) diambil sekali secara terpisah di awal, menjamin definisi kolom dan tipe data di MySQL lokal 100% presisi sebelum data dialirkan.
 - 🔄 **Dua Mode Sinkronisasi**:
   - **Sync Server (New & Update)**: Menggunakan watermark `Last ID` dan `Last Sync Time`. Data lokal dengan `id > Last ID` dihapus, lalu mengimpor data baru (`id > Last ID`) dan data yang berubah (`updated_at > Last Sync Time`).
@@ -129,7 +129,7 @@ Frontend menggunakan **Tailwind CSS 3**. Aturan UI dan kelas komponen dikelola d
 2. **Autentikasi & Handshake**: Mengambil sesi cookie dan CSRF token dari login PMA remote.
 3. **Auto-Discovery Skema**: Mengambil daftar Primary Key dan tabel dengan kolom `updated_at` langsung dari `INFORMATION_SCHEMA`.
 4. **Prefetch Struktur (DDL)**: Mengambil definisi skema tabel (`CREATE TABLE`) sekali di awal untuk menyiapkan struktur lokal.
-5. **Producer (Pre-fetch)**: Mengunduh data per tabel dalam potongan CSV + GZIP terkompresi melalui antrean terkelola (*bounded queue*) dengan 2 download worker paralel dan jeda micro-pause (250ms).
+5. **Producer (Pre-fetch)**: Mengunduh data per tabel dalam potongan CSV + GZIP terkompresi melalui antrean terkelola (_bounded queue_) dengan 2 download worker paralel dan jeda micro-pause (250ms).
 6. **Consumer (Decompress, Convert & Pipe)**:
    - Jika tabel 0 baris dan tidak butuh rebuild skema: **Fast-Skip**.
    - Jika tabel berisi data: Rust mendekompresi GZIP dan mem-parse CSV menjadi batch SQL `REPLACE/INSERT INTO` secara lokal, lalu menyalurkan langsung ke STDIN child process `mysql` lokal secara real-time.
@@ -140,18 +140,18 @@ Frontend menggunakan **Tailwind CSS 3**. Aturan UI dan kelas komponen dikelola d
 
 ## 🛠️ Teknologi yang Digunakan
 
-| Layer                | Komponen / Library                            | Deskripsi                                                       |
-| :------------------- | :-------------------------------------------- | :-------------------------------------------------------------- |
-| **Frontend UI**      | **Vue 3** (Composition API `<script setup>`)  | Antarmuka interaktif dan responsif                              |
-| **Build Tool**       | **Vite v6**                                   | Kompilasi frontend ultra-cepat                                  |
-| **Styling**          | **Tailwind CSS 3 + stylesheet terpusat**      | Kelas UI dan aturan komponen dikelola dari satu file            |
-| **Iconography**      | **SVG inline**                                | Ikon UI disematkan langsung pada komponen Vue                    |
-| **Desktop Core**     | **Tauri v2**                                  | Framework aplikasi desktop native lintas platform               |
-| **Backend Engine**   | **Rust (Edition 2021)**                       | Logika sinkronisasi native memori aman berkecepatan tinggi      |
-| **CSV Processing**   | **csv 1.4 / csv-core**                        | Parsing data CSV tabular streaming ultra-cepat di sisi client   |
-| **Database Client**  | **sqlx 0.8** (Tokio Async, Native TLS, MySQL) | Driver MySQL TCP async untuk inspeksi tabel & query lokal       |
-| **HTTP & Streaming** | **reqwest / flate2 / urlencoding**            | Client HTTP cookie-store, streaming dekompresi GZIP real-time   |
-| **IPC & Serde**      | **serde / serde_json / tauri-macros**        | Komunikasi data asinkron antara UI Vue dan backend Rust         |
+| Layer                | Komponen / Library                            | Deskripsi                                                     |
+| :------------------- | :-------------------------------------------- | :------------------------------------------------------------ |
+| **Frontend UI**      | **Vue 3** (Composition API `<script setup>`)  | Antarmuka interaktif dan responsif                            |
+| **Build Tool**       | **Vite v6**                                   | Kompilasi frontend ultra-cepat                                |
+| **Styling**          | **Tailwind CSS 3 + stylesheet terpusat**      | Kelas UI dan aturan komponen dikelola dari satu file          |
+| **Iconography**      | **SVG inline**                                | Ikon UI disematkan langsung pada komponen Vue                 |
+| **Desktop Core**     | **Tauri v2**                                  | Framework aplikasi desktop native lintas platform             |
+| **Backend Engine**   | **Rust (Edition 2021)**                       | Logika sinkronisasi native memori aman berkecepatan tinggi    |
+| **CSV Processing**   | **csv 1.4 / csv-core**                        | Parsing data CSV tabular streaming ultra-cepat di sisi client |
+| **Database Client**  | **sqlx 0.8** (Tokio Async, Native TLS, MySQL) | Driver MySQL TCP async untuk inspeksi tabel & query lokal     |
+| **HTTP & Streaming** | **reqwest / flate2 / urlencoding**            | Client HTTP cookie-store, streaming dekompresi GZIP real-time |
+| **IPC & Serde**      | **serde / serde_json / tauri-macros**         | Komunikasi data asinkron antara UI Vue dan backend Rust       |
 
 ---
 
@@ -172,8 +172,8 @@ Frontend menggunakan **Tailwind CSS 3**. Aturan UI dan kelas komponen dikelola d
 
 ```bash
 # Clone repository
-git clone https://github.com/HeriEfendi/DB-Sync-Desktop-Client.git
-cd DB-Sync-Desktop-Client
+git clone https://github.com/HeriEfendi/db-sync-pma.git
+cd db-sync-pma
 
 # Install dependency Node.js
 npm install
