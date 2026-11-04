@@ -71,7 +71,7 @@
           <span class="stat-value text-cyan">
             {{ formatNumber(syncProgress.currentTableIndex) }} / {{ formatNumber(syncProgress.totalTables) }}
           </span>
-           <span class="stat-label">Tabel Process: <span class="table-name-truncated" :title="syncProgress.currentTableName">{{ syncProgress.currentTableName || '...' }}</span></span>
+           <span class="stat-label">Tabel: <span class="table-name-truncated" :title="syncProgress.currentTableName">{{ syncProgress.currentTableName || '...' }}</span></span>
         </div>
 
         <div v-else class="stat-card">

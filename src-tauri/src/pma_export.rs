@@ -2737,12 +2737,13 @@ async fn fetch_table_export_stream(
                 struct_data.response_bytes
             };
             if !raw_struct_sql.is_empty() {
-                if let Err(e) = child_stdin.write_all(&raw_struct_sql).await {
+                let sanitized_struct = sanitize_sql_disable_fks(&raw_struct_sql);
+                if let Err(e) = child_stdin.write_all(&sanitized_struct).await {
                     let _ = child.start_kill();
                     stderr_task.abort();
                     return Err(format!("Gagal menulis skema DDL struktur ke MySQL lokal: {}", e));
                 }
-                let _ = child_stdin.write_all(b"\nCOMMIT;\n").await;
+                let _ = child_stdin.write_all(b"\nCOMMIT;\nSET SESSION foreign_key_checks=0;\nSET SESSION unique_checks=0;\nSET SESSION autocommit=0;\n").await;
                 let _ = child_stdin.flush().await;
             }
         }
@@ -3014,7 +3015,20 @@ async fn fetch_table_export_stream(
 
             // Alirkan langsung raw_chunk_sql ke STDIN child process MySQL secara real-time
             if !raw_chunk_sql.is_empty() {
-                if let Err(e) = child_stdin.write_all(&raw_chunk_sql).await {
+                let sanitized_chunk = sanitize_sql_disable_fks(&raw_chunk_sql);
+                let chunk_header = b"SET SESSION foreign_key_checks=0;\nSET SESSION unique_checks=0;\n";
+                if let Err(e) = child_stdin.write_all(chunk_header).await {
+                    let _ = child.start_kill();
+                    let err_buf = stderr_task.await.unwrap_or_default();
+                    let err_msg = String::from_utf8_lossy(&err_buf);
+                    let detail = if err_msg.trim().is_empty() {
+                        e.to_string()
+                    } else {
+                        format!("{} | Detail MySQL: {}", e, err_msg.trim())
+                    };
+                    return Err(format!("[Tabel '{}'] Gagal menulis header chunk ke MySQL: {}", table_name, detail));
+                }
+                if let Err(e) = child_stdin.write_all(&sanitized_chunk).await {
                     let _ = child.start_kill();
                     let err_buf = stderr_task.await.unwrap_or_default();
                     let err_msg = String::from_utf8_lossy(&err_buf);
@@ -3240,6 +3254,7 @@ fn spawn_mysql_child(
             .arg("--net-buffer-length=1M")
             .arg("--connect-timeout=60")
             .arg("--default-character-set=utf8mb4")
+            .arg("--init-command=SET SESSION foreign_key_checks=0; SET SESSION unique_checks=0; SET SESSION autocommit=0;")
             .arg("-u")
             .arg(&local_config.username);
 
@@ -3259,6 +3274,7 @@ fn spawn_mysql_child(
             .arg("--net-buffer-length=1M")
             .arg("--connect-timeout=60")
             .arg("--default-character-set=utf8mb4")
+            .arg("--init-command=SET SESSION foreign_key_checks=0; SET SESSION unique_checks=0; SET SESSION autocommit=0;")
             .arg("-h")
             .arg(host)
             .arg("-P")
@@ -3310,6 +3326,88 @@ fn spawn_mysql_child(
         .ok_or_else(|| "Gagal membuka STDERR child process mysql".to_string())?;
 
     Ok((child, child_stdin, child_stderr))
+}
+
+/// Memastikan tidak ada perintah SQL dari dump PMA yang mengaktifkan kembali FOREIGN_KEY_CHECKS
+/// atau UNIQUE_CHECKS di tengah-tengah proses sinkronisasi, yang dapat menyebabkan
+/// "ERROR 1452: Cannot add or update a child row: a foreign key constraint fails" dan memutus STDIN pipe (os error 32).
+fn sanitize_sql_disable_fks(sql: &[u8]) -> std::borrow::Cow<'_, [u8]> {
+    let lower_has_fk = sql.windows(18).any(|w| w.eq_ignore_ascii_case(b"foreign_key_checks"));
+    let lower_has_uq = sql.windows(13).any(|w| w.eq_ignore_ascii_case(b"unique_checks"));
+    if !lower_has_fk && !lower_has_uq {
+        return std::borrow::Cow::Borrowed(sql);
+    }
+
+    let s = String::from_utf8_lossy(sql);
+    let mut modified = s.into_owned();
+
+    // Helper untuk replace case-insensitive
+    fn replace_ci(source: &str, target: &str, replacement: &str) -> String {
+        let mut result = String::with_capacity(source.len());
+        let target_lower = target.to_ascii_lowercase();
+        let mut last_idx = 0;
+        let mut search_idx = 0;
+
+        while let Some(rel_pos) = source[search_idx..].to_ascii_lowercase().find(&target_lower) {
+            let match_idx = search_idx + rel_pos;
+            result.push_str(&source[last_idx..match_idx]);
+            result.push_str(replacement);
+            last_idx = match_idx + target.len();
+            search_idx = last_idx;
+        }
+        result.push_str(&source[last_idx..]);
+        result
+    }
+
+    // Pola PMA yang sering mengembalikan FOREIGN_KEY_CHECKS ke 1 atau ke variabel lama
+    let patterns_fk = [
+        ("FOREIGN_KEY_CHECKS=IFNULL(@OLD_FOREIGN_KEY_CHECKS, 1)", "FOREIGN_KEY_CHECKS=0"),
+        ("FOREIGN_KEY_CHECKS=IFNULL(@OLD_FOREIGN_KEY_CHECKS,1)", "FOREIGN_KEY_CHECKS=0"),
+        ("FOREIGN_KEY_CHECKS = IFNULL(@OLD_FOREIGN_KEY_CHECKS, 1)", "FOREIGN_KEY_CHECKS=0"),
+        ("FOREIGN_KEY_CHECKS = IFNULL(@OLD_FOREIGN_KEY_CHECKS,1)", "FOREIGN_KEY_CHECKS=0"),
+        ("FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS", "FOREIGN_KEY_CHECKS=0"),
+        ("FOREIGN_KEY_CHECKS = @OLD_FOREIGN_KEY_CHECKS", "FOREIGN_KEY_CHECKS=0"),
+        ("FOREIGN_KEY_CHECKS=1", "FOREIGN_KEY_CHECKS=0"),
+        ("FOREIGN_KEY_CHECKS = 1", "FOREIGN_KEY_CHECKS=0"),
+        ("FOREIGN_KEY_CHECKS=ON", "FOREIGN_KEY_CHECKS=0"),
+        ("FOREIGN_KEY_CHECKS = ON", "FOREIGN_KEY_CHECKS=0"),
+        ("FOREIGN_KEY_CHECKS='ON'", "FOREIGN_KEY_CHECKS=0"),
+        ("FOREIGN_KEY_CHECKS = 'ON'", "FOREIGN_KEY_CHECKS=0"),
+        ("@OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS", "@OLD_FOREIGN_KEY_CHECKS=0"),
+        ("@OLD_FOREIGN_KEY_CHECKS = @@FOREIGN_KEY_CHECKS", "@OLD_FOREIGN_KEY_CHECKS=0"),
+    ];
+
+    for (target, repl) in &patterns_fk {
+        if modified.to_ascii_lowercase().contains(&target.to_ascii_lowercase()) {
+            modified = replace_ci(&modified, target, repl);
+        }
+    }
+
+    // Pola PMA yang sering mengembalikan UNIQUE_CHECKS ke 1 atau ke variabel lama
+    let patterns_uq = [
+        ("UNIQUE_CHECKS=IFNULL(@OLD_UNIQUE_CHECKS, 1)", "UNIQUE_CHECKS=0"),
+        ("UNIQUE_CHECKS=IFNULL(@OLD_UNIQUE_CHECKS,1)", "UNIQUE_CHECKS=0"),
+        ("UNIQUE_CHECKS = IFNULL(@OLD_UNIQUE_CHECKS, 1)", "UNIQUE_CHECKS=0"),
+        ("UNIQUE_CHECKS = IFNULL(@OLD_UNIQUE_CHECKS,1)", "UNIQUE_CHECKS=0"),
+        ("UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS", "UNIQUE_CHECKS=0"),
+        ("UNIQUE_CHECKS = @OLD_UNIQUE_CHECKS", "UNIQUE_CHECKS=0"),
+        ("UNIQUE_CHECKS=1", "UNIQUE_CHECKS=0"),
+        ("UNIQUE_CHECKS = 1", "UNIQUE_CHECKS=0"),
+        ("UNIQUE_CHECKS=ON", "UNIQUE_CHECKS=0"),
+        ("UNIQUE_CHECKS = ON", "UNIQUE_CHECKS=0"),
+        ("UNIQUE_CHECKS='ON'", "UNIQUE_CHECKS=0"),
+        ("UNIQUE_CHECKS = 'ON'", "UNIQUE_CHECKS=0"),
+        ("@OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS", "@OLD_UNIQUE_CHECKS=0"),
+        ("@OLD_UNIQUE_CHECKS = @@UNIQUE_CHECKS", "@OLD_UNIQUE_CHECKS=0"),
+    ];
+
+    for (target, repl) in &patterns_uq {
+        if modified.to_ascii_lowercase().contains(&target.to_ascii_lowercase()) {
+            modified = replace_ci(&modified, target, repl);
+        }
+    }
+
+    std::borrow::Cow::Owned(modified.into_bytes())
 }
 
 /// Helper untuk meng-escape karakter spesial SQL MySQL standar secara aman
@@ -3388,6 +3486,7 @@ fn convert_csv_to_sql_batch(
         .join(", ");
 
     let mut output_sql = Vec::new();
+    output_sql.extend_from_slice(b"SET SESSION foreign_key_checks=0;\nSET SESSION unique_checks=0;\n");
     let mut total_rows = 0usize;
     let mut last_pk_val = None;
 
@@ -3754,7 +3853,8 @@ async fn import_table_to_local_internal(
         );
     }
 
-    let sql_bytes_arc = std::sync::Arc::new(sql_bytes);
+    let sanitized_bytes = sanitize_sql_disable_fks(&sql_bytes);
+    let sql_bytes_arc = std::sync::Arc::new(sanitized_bytes.into_owned());
     let total_sql_len = sql_bytes_arc.len();
 
     let max_retries = 3;
