@@ -848,11 +848,11 @@
   justify-content: center;
   align-items: flex-end;
   background: rgba(15, 23, 42, 0.4);
-  padding: 2px 8px;
+  padding: 3px 10px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-color);
   min-width: unset;
-  height: var(--control-height);
+  height: 38px;
   box-sizing: border-box;
   transition: all 0.2s ease;
   white-space: nowrap;
@@ -870,17 +870,17 @@
 }
 
 [data-ui="sync"] .stat-value, [data-ui="sync"].stat-value {
-  font-size: 0.82rem;
+  font-size: 0.98rem;
   font-weight: 700;
   font-family: 'JetBrains Mono', monospace;
-  line-height: 1.1;
+  line-height: 1.15;
 }
 
 [data-ui="sync"] .stat-label, [data-ui="sync"].stat-label {
-  font-size: 8.5px;
+  font-size: 10px;
   color: var(--text-muted);
   white-space: nowrap;
-  line-height: 1;
+  line-height: 1.1;
 }
 
 [data-ui="sync"] .text-emerald, [data-ui="sync"].text-emerald { color: var(--accent-emerald); }
@@ -1277,8 +1277,8 @@
 [data-ui="sync"].sync-control-card { padding: 8px 10px; }
 [data-ui="sync"] .control-grid { gap: 8px; flex-wrap: nowrap; }
 [data-ui="sync"] .stats-grid { gap: 6px; flex-wrap: nowrap; }
-[data-ui="sync"] .stat-card { min-height: unset; height: var(--control-height); padding: 2px 8px; min-width: unset; }
-[data-ui="sync"] .stat-card-current-table { width: auto; max-width: 170px; }
+[data-ui="sync"] .stat-card { min-height: unset; height: 38px; padding: 3px 10px; min-width: unset; }
+[data-ui="sync"] .stat-card-current-table { width: auto; max-width: 180px; }
 [data-ui="sync"] .sync-options-card { margin-top: 6px; padding: 6px 8px; }
 [data-ui="sync"] .sync-live-banner { margin-top: 6px; padding: 6px 8px; }
 [data-ui="sync"] .sync-states-card { margin-top: 6px; }
@@ -1289,8 +1289,8 @@
 [data-ui="tables"] .btn-sm { height: 24px; padding: 2px 8px; font-size: 10px; }
 [data-ui="tables"] .btn-xs { height: 20px; padding: 2px 6px; font-size: 9px; }
 [data-ui="logs"] .log-window { min-height: 0; }
-[data-ui="sync"] .stat-value { font-size: 0.82rem; line-height: 1.1; }
-[data-ui="sync"] .stat-label { font-size: 8.5px; line-height: 1; }
+[data-ui="sync"] .stat-value { font-size: 0.98rem; line-height: 1.15; }
+[data-ui="sync"] .stat-label { font-size: 10px; line-height: 1.1; }
 [data-ui="sync"] .radio-label-inline { padding: 4px 7px; font-size: 11px; }
 [data-ui="sync"] .option-title { font-size: 10px; }
 
