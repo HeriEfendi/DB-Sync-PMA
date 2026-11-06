@@ -765,8 +765,17 @@
 [data-ui="sync"] .options-row, [data-ui="sync"].options-row, [data-ui="sync"] .sync-settings-row, [data-ui="sync"].sync-settings-row {
   display: flex;
   align-items: center;
-  gap: 24px;
-  flex-wrap: wrap;
+  gap: 16px;
+  flex-wrap: nowrap;
+  width: 100%;
+}
+
+[data-ui="sync"] .options-row .console-trigger, [data-ui="sync"].options-row .console-trigger {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 [data-ui="sync"] .option-inline, [data-ui="sync"].option-inline {

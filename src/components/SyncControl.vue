@@ -51,12 +51,6 @@
           <span>Sync {{ syncProgress.currentTableIndex }}/{{ syncProgress.totalTables }}</span>
           <strong>{{ syncProgress.currentTableName || 'Menyiapkan...' }}</strong>
         </div>
-
-        <button class="btn btn-secondary btn-sm console-trigger" type="button" @click="$emit('open-console')">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
-          <span>Console Log</span>
-          <span class="console-count">{{ logCount }}</span>
-        </button>
       </div>
 
       <div class="stats-grid">
@@ -106,6 +100,11 @@
             <option :value="0">Semua Row (Default)</option><option :value="1000">1.000 Row</option><option :value="10000">10.000 Row</option><option :value="100000">100.000 Row</option><option :value="500000">500.000 Row</option><option :value="1000000">1.000.000 Row</option><option :value="2000000">2.000.000 Row</option><option :value="5000000">5.000.000 Row</option>
           </select>
         </div>
+        <button class="btn btn-secondary btn-sm console-trigger" type="button" @click="$emit('open-console')">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+          <span>Console Log</span>
+          <span class="console-count">{{ logCount }}</span>
+        </button>
       </div>
     </div>
 
