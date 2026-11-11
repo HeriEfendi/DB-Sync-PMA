@@ -7,113 +7,63 @@
       </div>
 
       <div class="preset-controls">
-        <button class="btn btn-secondary btn-sm" title="Simpan perubahan ke preset yang dipilih" :disabled="!selectedPresetName" @click="updatePreset">
+        <button
+          class="btn btn-secondary btn-sm"
+          title="Simpan perubahan ke preset yang dipilih"
+          :disabled="!selectedPresetName"
+          @click="updatePreset"
+        >
           Simpan
         </button>
-        <button class="btn btn-danger btn-sm" type="button" :disabled="!selectedPresetName" @click="deletePreset">
+        <button
+          class="btn btn-danger btn-sm"
+          type="button"
+          :disabled="!selectedPresetName"
+          @click="deletePreset"
+        >
           Hapus
         </button>
       </div>
     </div>
 
     <div class="tab-header">
-      <button data-tab="remote" class="tab-btn" :class="{ active: activeTab === 'remote' }" @click="activeTab = 'remote'">
+      <button
+        data-tab="remote"
+        class="tab-btn"
+        :class="{ active: activeTab === 'remote' }"
+        @click="activeTab = 'remote'"
+      >
         <span>1. Remote PMA</span>
       </button>
-      <button data-tab="local" class="tab-btn" :class="{ active: activeTab === 'local' }" @click="activeTab = 'local'">
+      <button
+        data-tab="local"
+        class="tab-btn"
+        :class="{ active: activeTab === 'local' }"
+        @click="activeTab = 'local'"
+      >
         <span>2. MySQL Lokal</span>
       </button>
     </div>
 
-    <div v-show="activeTab === 'remote'" class="tab-content">
-      <div class="form-row">
-        <div class="form-group flex-2">
-          <label class="form-label">URL PhpMyAdmin Remote</label>
-          <input v-model="pmaConfig.url" type="url" class="form-input" placeholder="https://server.domain.com/phpmyadmin" @change="$emit('update:pma-config', pmaConfig)" />
-        </div>
-        <div class="form-group flex-1">
-          <label class="form-label">PMA Username</label>
-          <input v-model="pmaConfig.username" type="text" class="form-input" placeholder="root / admin" @change="$emit('update:pma-config', pmaConfig)" />
-        </div>
-        <div class="form-group flex-1">
-          <label class="form-label">PMA Password</label>
-          <input v-model="pmaConfig.password" type="password" class="form-input" placeholder="••••••••" @change="$emit('update:pma-config', pmaConfig)" />
-        </div>
-      </div>
+    <PmaConnectionTab
+      v-show="activeTab === 'remote'"
+      :config="pmaConfig"
+      @update:config="$emit('update:pma-config', $event)"
+    />
 
-      <div class="form-row">
-        <div class="form-group flex-2">
-          <label class="form-label">Database Remote</label>
-          <input v-model="pmaConfig.database" type="text" class="form-input" placeholder="my_remote_db" @change="$emit('update:pma-config', pmaConfig)" />
-        </div>
-        <div class="form-group flex-1">
-          <label class="form-label">Default Primary Key</label>
-          <input v-model="pmaConfig.primaryKey" type="text" class="form-input" placeholder="id" @change="$emit('update:pma-config', pmaConfig)" />
-        </div>
-      </div>
-
-    </div>
-
-    <div v-show="activeTab === 'local'" class="tab-content">
-      <div class="form-row">
-        <div class="form-group flex-2">
-          <label class="form-label">Host Server MySQL</label>
-          <input v-model="localConfig.host" type="text" class="form-input" placeholder="localhost / 127.0.0.1" @change="$emit('update:local-config', localConfig)" />
-        </div>
-        <div class="form-group flex-1">
-          <label class="form-label">Port TCP</label>
-          <input v-model.number="localConfig.port" type="number" class="form-input" placeholder="3306" @change="$emit('update:local-config', localConfig)" />
-        </div>
-      </div>
-
-      <div class="form-row">
-        <div class="form-group flex-1">
-          <label class="form-label">Username DB Lokal</label>
-          <input v-model="localConfig.username" type="text" class="form-input" placeholder="root" @change="$emit('update:local-config', localConfig)" />
-        </div>
-        <div class="form-group flex-1">
-          <label class="form-label">Password DB Lokal</label>
-          <input v-model="localConfig.password" type="password" class="form-input" placeholder="Kosongkan jika tanpa password" @change="$emit('update:local-config', localConfig)" />
-        </div>
-        <div class="form-group flex-1">
-          <label class="form-label">Database Target Lokal</label>
-          <input v-model="localConfig.database" type="text" class="form-input" placeholder="my_local_db" @change="$emit('update:local-config', localConfig)" />
-        </div>
-      </div>
-
-      <div class="form-row docker-row">
-        <div class="form-group flex-1">
-          <label class="docker-toggle-label">
-            <input
-              v-model="localConfig.use_docker"
-              type="checkbox"
-              class="docker-toggle-input"
-              @change="$emit('update:local-config', localConfig)"
-            />
-            <span class="docker-toggle-title">Gunakan Docker Container (docker exec)</span>
-          </label>
-          <p class="docker-help">
-            Gunakan opsi ini jika MySQL berjalan di Docker dan OS host tidak memiliki client CLI 'mysql'.
-          </p>
-        </div>
-        <div v-if="localConfig.use_docker" class="form-group flex-1">
-          <label class="form-label">Nama / ID Kontainer Docker</label>
-          <input
-            v-model="localConfig.docker_container"
-            type="text"
-            class="form-input"
-            placeholder="misal: my-mysql atau mysql-server"
-            @change="$emit('update:local-config', localConfig)"
-          />
-        </div>
-      </div>
-
-    </div>
+    <LocalConnectionTab
+      v-show="activeTab === 'local'"
+      :config="localConfig"
+      @update:config="$emit('update:local-config', $event)"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, watch, nextTick } from 'vue';
+import { ref, onMounted, watch } from 'vue';
+import { usePresets } from '../composables/usePresets.js';
+import PmaConnectionTab from './connection/PmaConnectionTab.vue';
+import LocalConnectionTab from './connection/LocalConnectionTab.vue';
 
 const props = defineProps({
   pmaConfig: { type: Object, required: true },
@@ -134,33 +84,33 @@ const emit = defineEmits([
 ]);
 
 const activeTab = ref('remote');
-const selectedPresetName = ref('');
-const presets = ref({});
-
 const pmaConfig = ref({ ...props.pmaConfig });
 const localConfig = ref({ ...props.localConfig });
 
-watch(() => props.pmaConfig, (val) => {
-  pmaConfig.value = { ...val };
-}, { deep: true });
+watch(() => props.pmaConfig, (val) => { pmaConfig.value = { ...val }; }, { deep: true });
+watch(() => props.localConfig, (val) => { localConfig.value = { ...val }; }, { deep: true });
 
-watch(() => props.localConfig, (val) => {
-  localConfig.value = { ...val };
-}, { deep: true });
+const {
+  presets,
+  selectedPresetName,
+  loadPresetList,
+  createPreset,
+  updatePreset,
+  deletePreset,
+  selectPreset,
+} = usePresets({
+  pmaConfig,
+  localConfig,
+  emit,
+  notifyToast: props.notifyToast,
+  requestInput: props.requestInput,
+  requestConfirmation: props.requestConfirmation,
+});
 
 watch(() => props.selectedPreset, (val) => {
   if (val !== undefined && val !== selectedPresetName.value) {
     selectedPresetName.value = val;
   }
-});
-
-watch(selectedPresetName, (name) => {
-  if (name) {
-    localStorage.setItem('db_sync_last_preset', name);
-  } else {
-    localStorage.removeItem('db_sync_last_preset');
-  }
-  emit('update:selected-preset', name);
 });
 
 onMounted(() => {
@@ -181,94 +131,6 @@ onMounted(() => {
     emit('update:selected-preset', '');
   }
 });
-
-const loadPresetList = () => {
-  try {
-    const raw = localStorage.getItem('db_sync_presets');
-    if (raw) presets.value = JSON.parse(raw);
-  } catch (e) {
-    console.error('Failed loading presets:', e);
-  }
-};
-
-const createPreset = async () => {
-  const name = await props.requestInput({
-    title: 'Tambah profil koneksi',
-    placeholder: 'Contoh: Production Core Sync',
-    confirmLabel: 'Tambah profil',
-  });
-  if (!name || !name.trim()) return;
-  const trimmed = name.trim();
-
-  presets.value[trimmed] = {
-    pmaConfig: { ...props.pmaConfig },
-    localConfig: { ...props.localConfig },
-  };
-
-  localStorage.setItem('db_sync_presets', JSON.stringify(presets.value));
-  selectedPresetName.value = trimmed;
-  emit('update:selected-preset', trimmed);
-  emit('preset-changed', trimmed);
-  props.notifyToast({ type: 'success', title: 'Profil ditambahkan', message: `Profil koneksi "${trimmed}" berhasil dibuat.` });
-};
-
-const updatePreset = () => {
-  const name = selectedPresetName.value;
-  if (!name || !presets.value[name]) return;
-
-  presets.value[name] = {
-    pmaConfig: { ...props.pmaConfig },
-    localConfig: { ...props.localConfig },
-  };
-
-  localStorage.setItem('db_sync_presets', JSON.stringify(presets.value));
-  props.notifyToast({ type: 'success', title: 'Profil diperbarui', message: `Perubahan profil "${name}" berhasil disimpan.` });
-};
-
-const deletePreset = async () => {
-  const name = selectedPresetName.value;
-  if (!name || !presets.value[name]) return;
-  const confirmed = await props.requestConfirmation({
-    title: 'Hapus profil koneksi?',
-    message: `Profil "${name}" akan dihapus permanen. Tindakan ini tidak bisa dibatalkan.`,
-    confirmLabel: 'Hapus profil',
-  });
-  if (!confirmed) return;
-
-  delete presets.value[name];
-  localStorage.setItem('db_sync_presets', JSON.stringify(presets.value));
-  selectedPresetName.value = '';
-  emit('update:selected-preset', '');
-  emit('preset-changed', '');
-  emit('update:pma-config', { url: '', username: '', password: '', database: '' });
-  emit('update:local-config', { host: '', port: 3306, username: '', password: '', database: '' });
-  props.notifyToast({ type: 'success', title: 'Profil dihapus', message: `Profil koneksi "${name}" berhasil dihapus.` });
-};
-
-const loadPreset = async () => {
-  const name = selectedPresetName.value;
-  emit('update:selected-preset', name);
-  emit('preset-changed', name);
-
-  if (!name) {
-    emit('update:pma-config', { url: '', username: '', password: '', database: '' });
-    emit('update:local-config', { host: '', port: 3306, username: '', password: '', database: '' });
-  } else if (presets.value[name]) {
-    const p = presets.value[name];
-    if (p.pmaConfig) emit('update:pma-config', { ...p.pmaConfig });
-    if (p.localConfig) emit('update:local-config', { ...p.localConfig });
-  }
-
-  await nextTick();
-  if (name) props.notifyToast({ type: 'success', title: 'Profil dimuat', message: `Konfigurasi profil "${name}" diterapkan.` });
-  emit('test-pma');
-  emit('test-local');
-};
-
-const selectPreset = async (name) => {
-  selectedPresetName.value = name;
-  await loadPreset();
-};
 
 defineExpose({ presets, selectPreset, createPreset, updatePreset, deletePreset });
 </script>

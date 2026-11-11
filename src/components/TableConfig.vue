@@ -13,14 +13,19 @@
         <span v-if="fetchingTables" class="spin-sm"></span>
         <span>Ambil Tabel</span>
       </button>
-      <div class="table-search-box"><input v-model="tableSearchQuery" type="text" class="form-input form-input-sm" placeholder="Cari tabel..." /></div>
+      <div class="table-search-box">
+        <input v-model="tableSearchQuery" type="text" class="form-input form-input-sm" placeholder="Cari tabel..." />
+      </div>
       <button class="btn btn-ghost btn-xs" @click="selectAllTables">Centang Semua</button>
       <button class="btn btn-ghost btn-xs" @click="deselectAllTables">Hapus Centang</button>
       <div class="selection-info-pill">
         <span>Terpilih: <strong>{{ selectedTables.length }}</strong> / {{ availableTables.length }}</span>
       </div>
       <div class="tools-divider"></div>
-      <select v-model="selectedTemplateName" class="form-select preset-select" @change="loadTableTemplate"><option value="">-- Template Tabel --</option><option v-for="(t, key) in tableTemplates" :key="key" :value="key">{{ key }}</option></select>
+      <select v-model="selectedTemplateName" class="form-select preset-select" @change="loadTableTemplate">
+        <option value="">-- Template Tabel --</option>
+        <option v-for="(t, key) in tableTemplates" :key="key" :value="key">{{ key }}</option>
+      </select>
       <label class="sr-only" for="table-template-action">Kelola template tabel</label>
       <select id="table-template-action" class="form-select preset-select" value="" @change="handleTableTemplateAction">
         <option value="" disabled>Kelola Template Tabel</option>
@@ -34,42 +39,27 @@
       <div v-if="availableTables.length === 0" class="empty-tables-hint">
         <span>Belum ada daftar tabel. Klik <strong>"Ambil Tabel"</strong> untuk mendeteksi tabel dari database remote, atau ketik nama tabel secara manual.</span>
         <div class="manual-table-input">
-          <input v-model="manualTableName" type="text" class="form-input form-input-sm" placeholder="Nama tabel manual (misal: users)" @keyup.enter="addManualTable" />
+          <input
+            v-model="manualTableName"
+            type="text"
+            class="form-input form-input-sm"
+            placeholder="Nama tabel manual (misal: users)"
+            @keyup.enter="addManualTable"
+          />
           <button class="btn btn-secondary btn-xs" @click="addManualTable">+ Tambah</button>
         </div>
       </div>
 
       <div v-else class="table-checkbox-grid-wrap">
         <div class="table-checkbox-grid">
-          <label
+          <TableItemCard
             v-for="tableName in displayedTables"
             :key="tableName"
-            class="table-checkbox-card"
-            :class="{ selected: selectedTablesSet.has(tableName) }"
-          >
-            <input
-              type="checkbox"
-              :value="tableName"
-              :checked="selectedTablesSet.has(tableName)"
-              @change="toggleTableSelection(tableName)"
-            />
-            <div class="table-card-body">
-              <span class="table-name-text" :title="tableName">{{ tableName }}</span>
-              <div class="table-card-meta">
-                <template v-if="tableStateMap.get(tableName)">
-                  <span class="meta-item">
-                    <span class="meta-label">Last ID:</span>
-                    <strong class="text-amber">{{ tableStateMap.get(tableName).lastSyncedId !== null && tableStateMap.get(tableName).lastSyncedId !== undefined ? tableStateMap.get(tableName).lastSyncedId : '-' }}</strong>
-                  </span>
-                  <span class="meta-item">
-                    <span class="meta-label">Sync:</span>
-                    <span class="text-muted">{{ formatDate(tableStateMap.get(tableName).lastSyncTime) }}</span>
-                  </span>
-                </template>
-                <span v-else class="meta-item text-dim">Belum pernah sync</span>
-              </div>
-            </div>
-          </label>
+            :table-name="tableName"
+            :is-selected="selectedTablesSet.has(tableName)"
+            :table-state="tableStateMap.get(tableName)"
+            @toggle="toggleTableSelection"
+          />
         </div>
 
         <div v-if="filteredTables.length > displayLimit" class="show-more-tables">
@@ -86,7 +76,9 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue';
+import { ref, computed, watch, onMounted, toRef } from 'vue';
+import { useTableTemplates } from '../composables/useTableTemplates.js';
+import TableItemCard from './table/TableItemCard.vue';
 
 const props = defineProps({
   serverKey: { type: String, default: 'default' },
@@ -119,39 +111,28 @@ const tableStateMap = computed(() => {
   return map;
 });
 
-const formatDate = (isoString) => {
-  if (!isoString) return '-';
-  try {
-    const d = new Date(isoString);
-    if (isNaN(d.getTime())) return isoString;
-    const datePart = d.toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    const timePart = d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(/\./g, ':');
-    return `${datePart}, ${timePart}`;
-  } catch {
-    return isoString;
-  }
-};
-
 const tableSearchQuery = ref('');
 const manualTableName = ref('');
-const selectedTemplateName = ref('');
-const tableTemplates = ref({});
 const displayLimit = ref(60);
 
 watch(tableSearchQuery, () => {
   displayLimit.value = 60;
 });
 
-const getTemplatesStorageKey = () => `db_sync_table_templates_${props.serverKey || 'default'}`;
-const getLastTemplateStorageKey = () => `db_sync_last_table_template_${props.serverKey || 'default'}`;
-
-watch(selectedTemplateName, (name) => {
-  const lastKey = getLastTemplateStorageKey();
-  if (name) {
-    localStorage.setItem(lastKey, name);
-  } else {
-    localStorage.removeItem(lastKey);
-  }
+const {
+  selectedTemplateName,
+  tableTemplates,
+  loadTableTemplateList,
+  loadTableTemplate,
+  handleTableTemplateAction,
+  getLastTemplateStorageKey,
+} = useTableTemplates({
+  serverKeyRef: toRef(props, 'serverKey'),
+  selectedTablesRef: toRef(props, 'selectedTables'),
+  emit,
+  notifyToast: props.notifyToast,
+  requestInput: props.requestInput,
+  requestConfirmation: props.requestConfirmation,
 });
 
 watch(() => props.serverKey, (newKey) => {
@@ -191,9 +172,7 @@ const filteredTables = computed(() => {
   return props.availableTables.filter((t) => t.toLowerCase().includes(q));
 });
 
-const displayedTables = computed(() => {
-  return filteredTables.value.slice(0, displayLimit.value);
-});
+const displayedTables = computed(() => filteredTables.value.slice(0, displayLimit.value));
 
 const toggleTableSelection = (tableName) => {
   const current = [...props.selectedTables];
@@ -219,7 +198,11 @@ const selectAllTables = () => {
 const deselectAllTables = () => {
   const filtered = new Set(filteredTables.value);
   emit('update:selectedTables', props.selectedTables.filter((t) => !filtered.has(t)));
-  props.notifyToast({ type: 'info', title: 'Pilihan tabel dibersihkan', message: 'Tabel yang tampil pada daftar sudah tidak dipilih.' });
+  props.notifyToast({
+    type: 'info',
+    title: 'Pilihan tabel dibersihkan',
+    message: 'Tabel yang tampil pada daftar sudah tidak dipilih.',
+  });
 };
 
 const addManualTable = () => {
@@ -247,73 +230,5 @@ const addManualTable = () => {
       ? `Tabel ${tName} sudah ada dan dipilih untuk sinkronisasi.`
       : `Tabel ${tName} ditambahkan ke daftar pilihan.`,
   });
-};
-
-const loadTableTemplateList = () => {
-  try {
-    const key = getTemplatesStorageKey();
-    let raw = localStorage.getItem(key);
-    if (!raw) {
-      raw = localStorage.getItem('db_sync_table_templates');
-    }
-    tableTemplates.value = raw ? JSON.parse(raw) : {};
-  } catch (e) {
-    console.error('Failed loading table templates:', e);
-    tableTemplates.value = {};
-  }
-};
-
-const loadTableTemplate = () => {
-  const name = selectedTemplateName.value;
-  if (!name || !tableTemplates.value[name]) return;
-  emit('update:selectedTables', [...tableTemplates.value[name]]);
-  props.notifyToast({ type: 'success', title: 'Template diterapkan', message: `${tableTemplates.value[name].length} tabel dipilih dari "${name}".` });
-};
-
-const createTableTemplate = async () => {
-  const name = await props.requestInput({
-    title: 'Tambah template tabel',
-    placeholder: 'Contoh: Core Tables',
-    confirmLabel: 'Tambah template',
-  });
-  if (!name || !name.trim()) return;
-
-  const trimmed = name.trim();
-  tableTemplates.value[trimmed] = [...props.selectedTables];
-  localStorage.setItem(getTemplatesStorageKey(), JSON.stringify(tableTemplates.value));
-  selectedTemplateName.value = trimmed;
-  props.notifyToast({ type: 'success', title: 'Template ditambahkan', message: `Template "${trimmed}" menyimpan ${props.selectedTables.length} tabel.` });
-};
-
-const updateTableTemplate = () => {
-  const name = selectedTemplateName.value;
-  if (!name) return;
-  tableTemplates.value[name] = [...props.selectedTables];
-  localStorage.setItem(getTemplatesStorageKey(), JSON.stringify(tableTemplates.value));
-  props.notifyToast({ type: 'success', title: 'Template diperbarui', message: `${props.selectedTables.length} tabel disimpan ke "${name}".` });
-};
-
-const deleteTableTemplate = async () => {
-  const name = selectedTemplateName.value;
-  if (!name || !tableTemplates.value[name]) return;
-  const confirmed = await props.requestConfirmation({
-    title: 'Hapus template tabel?',
-    message: `Template "${name}" akan dihapus permanen. Tindakan ini tidak bisa dibatalkan.`,
-    confirmLabel: 'Hapus template',
-  });
-  if (!confirmed) return;
-  delete tableTemplates.value[name];
-  localStorage.setItem(getTemplatesStorageKey(), JSON.stringify(tableTemplates.value));
-  selectedTemplateName.value = '';
-  props.notifyToast({ type: 'success', title: 'Template dihapus', message: `Template "${name}" berhasil dihapus.` });
-};
-
-const handleTableTemplateAction = (event) => {
-  const action = event.target.value;
-  event.target.value = '';
-
-  if (action === 'update') updateTableTemplate();
-  if (action === 'create') createTableTemplate();
-  if (action === 'delete') deleteTableTemplate();
 };
 </script>
