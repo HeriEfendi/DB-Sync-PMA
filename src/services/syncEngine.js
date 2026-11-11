@@ -1,25 +1,7 @@
 import { isTauriEnvironment, safeInvoke, safeListen } from './tauriHelper.js';
-import { getTableState, saveTableState } from './syncStateStore.js';
-
-function formatMySQLDateTime(date = new Date()) {
-  const d = new Date(date);
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}
-
-function formatDurationText(ms) {
-  if (!ms || isNaN(ms)) return '0 detik';
-  const totalSec = Math.round(ms / 1000);
-  const hours = Math.floor(totalSec / 3600);
-  const minutes = Math.floor((totalSec % 3600) / 60);
-  const seconds = totalSec % 60;
-
-  const parts = [];
-  if (hours > 0) parts.push(`${hours} jam`);
-  if (minutes > 0) parts.push(`${minutes} menit`);
-  if (seconds > 0 || parts.length === 0) parts.push(`${seconds} detik`);
-  return parts.join(' ');
-}
+import { getTableState } from './syncStateStore.js';
+import { formatDurationText } from '../utils/formatters.js';
+import { normalizeLocalDbConfig, updateSyncedTableStates } from '../utils/syncUtils.js';
 
 export class SyncEngine {
   constructor(pmaConfig, localDbConfig, options = {}) {
@@ -54,22 +36,10 @@ export class SyncEngine {
 
   log(type, message) {
     this.onLog({
-      type, // 'info' | 'success' | 'warning' | 'error'
+      type,
       message,
       timestamp: new Date().toLocaleTimeString('id-ID').replace(/\./g, ':'),
     });
-  }
-
-  normalizeLocalDbConfig() {
-    return {
-      host: this.localDbConfig?.host || '127.0.0.1',
-      port: parseInt(this.localDbConfig?.port || 3306, 10),
-      username: this.localDbConfig?.username || 'root',
-      password: this.localDbConfig?.password || '',
-      database: this.localDbConfig?.database || '',
-      use_docker: Boolean(this.localDbConfig?.use_docker),
-      docker_container: this.localDbConfig?.docker_container || '',
-    };
   }
 
   async stopSync() {
@@ -84,17 +54,13 @@ export class SyncEngine {
         }
       }
 
-      // Safety fallback: jika dalam 1.5 detik backend belum mengembalikan kontrol,
-      // paksa reset status sinkronisasi agar UI tidak macet dan tombol kembali bisa diklik tanpa perlu restart aplikasi
       if (!this._forceStopTimeout) {
         this._forceStopTimeout = setTimeout(() => {
           if (this.isSyncing) {
             this.log('warning', '⚠️ Memaksa reset status sinkronisasi frontend.');
             this.isSyncing = false;
             this.cleanupListeners();
-            this.onProgress({
-              status: 'idle',
-            });
+            this.onProgress({ status: 'idle' });
           }
           this._forceStopTimeout = null;
         }, 1500);
@@ -104,11 +70,6 @@ export class SyncEngine {
 
   /**
    * Execute multi-table synchronization cycle via Direct GZIP Stream (export.php)
-   * @param {Object} syncOptions
-   * @param {Array<string|Object>} syncOptions.tables - List of table names or objects
-   * @param {'incremental'|'fresh'} syncOptions.syncMode - Sync mode ('incremental' or 'fresh')
-   * @param {number} syncOptions.rowLimit - Maximum total rows to fetch per table (0 = unlimited)
-   * @param {number} syncOptions.batchSize - Batch size per chunk
    */
   async runMultiTableSync(syncOptions = {}) {
     if (this.isSyncing) {
@@ -129,10 +90,7 @@ export class SyncEngine {
     const totalRowLimit = parseInt(syncOptions.rowLimit || 0, 10);
     const totalTablesCount = tables.length;
 
-    // Bersihkan listener event lama agar tidak terjadi memory leak / duplikasi event
     this.cleanupListeners();
-
-    // Notify initial progress
     this.onProgress({
       currentTableIndex: 0,
       totalTables: totalTablesCount,
@@ -166,7 +124,7 @@ export class SyncEngine {
         }
         this.onProgress({
           currentTableIndex: event.payload.current_table_index,
-          totalTables: totalTablesCount, // Selalu kunci ke jumlah tabel yang aktif disinkronkan
+          totalTables: totalTablesCount,
           currentTableName: event.payload.current_table_name,
           rowsSyncedCurrentTable: rowsCount,
           rowsSyncedForCurrentTable: rowsCount,
@@ -187,17 +145,15 @@ export class SyncEngine {
         }
       });
 
-      const localConfig = this.normalizeLocalDbConfig();
+      const localConfig = normalizeLocalDbConfig(this.localDbConfig);
       const incrementalWatermarks = {};
 
       if (syncMode === 'incremental') {
-        // Build watermarks map for batch cleanup
         const cleanupWatermarks = {};
         for (const tableName of tableNames) {
           if (this.shouldStop) {
             this.isSyncing = false;
-            if (typeof unlistenLog === 'function') unlistenLog();
-            if (typeof unlistenProgress === 'function') unlistenProgress();
+            this.cleanupListeners();
             this.log('warning', '🛑 Sinkronisasi telah dihentikan oleh pengguna.');
             return { success: false, cancelled: true, error: 'Dibatalkan oleh pengguna' };
           }
@@ -215,7 +171,6 @@ export class SyncEngine {
           };
         }
 
-        // Single batch call — parallel + batched DELETE + progress events
         if (Object.keys(cleanupWatermarks).length > 0) {
           this.log('info', `🧹 Membersihkan data lokal yang melampaui server (${Object.keys(cleanupWatermarks).length} tabel)...`);
           try {
@@ -233,8 +188,7 @@ export class SyncEngine {
 
       if (this.shouldStop) {
         this.isSyncing = false;
-        if (typeof unlistenLog === 'function') unlistenLog();
-        if (typeof unlistenProgress === 'function') unlistenProgress();
+        this.cleanupListeners();
         this.log('warning', '🛑 Sinkronisasi telah dihentikan oleh pengguna.');
         return { success: false, cancelled: true, error: 'Dibatalkan oleh pengguna' };
       }
@@ -257,47 +211,15 @@ export class SyncEngine {
       });
 
       if (syncMode !== 'structure_only') {
-        const lastSyncTime = formatMySQLDateTime();
-
-        let batchResults = null;
-        try {
-          batchResults = await safeInvoke('get_all_tables_last_local_ids', {
-            config: localConfig,
-            tables: tableNames,
-          });
-        } catch (batchErr) {
-          console.warn('[Sync state] Batch last ID query gagal, fallback ke sequential:', batchErr);
-        }
-
-        for (const tableName of tableNames) {
-          const tableInfo = batchResults ? batchResults[tableName] : null;
-          const detectedPk = tableInfo?.primary_key || tablePrimaryKeys[tableName] || this.pmaConfig.primaryKey?.trim() || 'id';
-          const existingState = getTableState(this.serverHost, this.database, tableName);
-          let lastSyncedId = tableInfo?.last_id ?? null;
-
-          if (!tableInfo) {
-            try {
-              lastSyncedId = await safeInvoke('get_last_local_id', {
-                config: localConfig,
-                tableName,
-                primaryKey: detectedPk,
-              });
-            } catch (error) {
-              console.warn(`[Sync state] Gagal membaca MAX(${detectedPk}) untuk '${tableName}':`, error);
-            }
-          }
-
-          const isValidNewId = lastSyncedId !== null && lastSyncedId !== undefined && lastSyncedId !== 0 && lastSyncedId !== '0';
-          const finalLastSyncedId = isValidNewId ? lastSyncedId : (existingState?.lastSyncedId ?? null);
-
-          saveTableState(this.serverHost, this.database, tableName, {
-            lastSyncedId: finalLastSyncedId,
-            lastSyncTime,
-            rowsSynced: 0,
-            primaryKey: detectedPk,
-          });
-          this.onTableSynced(tableName);
-        }
+        await updateSyncedTableStates(
+          this.serverHost,
+          this.database,
+          tableNames,
+          tablePrimaryKeys,
+          this.pmaConfig.primaryKey,
+          localConfig,
+          this.onTableSynced
+        );
       }
 
       const elapsed = Math.round(performance.now() - startTime);

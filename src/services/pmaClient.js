@@ -1,9 +1,12 @@
 import { safeFetch } from './tauriHelper.js';
-
-function cleanFieldName(name) {
-  if (!name || typeof name !== 'string') return name;
-  return name.replace(/\s+\d+$/, '').trim();
-}
+import { updateCookieHeader } from '../utils/cookieHelper.js';
+import {
+  cleanFieldName,
+  isValidTableName,
+  extractPmaError,
+  extractTokenFromHtml,
+  extractTablesFromHtmlFallback,
+} from '../utils/pmaHtmlParser.js';
 
 /**
  * PhpMyAdmin HTTP Native Client Service
@@ -21,9 +24,6 @@ export class PmaClient {
     this.token = '';
   }
 
-  /**
-   * Helper to normalize PMA base endpoint
-   */
   getEndpoint(path = '') {
     const base = this.activeBaseUrl || this.baseUrl;
     if (!path) return base;
@@ -31,39 +31,7 @@ export class PmaClient {
   }
 
   updateCookies(responseHeaders) {
-    if (!responseHeaders) return;
-
-    let setCookieHeaders = [];
-    if (typeof responseHeaders.getSetCookie === 'function') {
-      setCookieHeaders = responseHeaders.getSetCookie();
-    } else {
-      const raw = responseHeaders.get('set-cookie');
-      if (raw) {
-        setCookieHeaders = raw.split(/,\s*(?=[A-Za-z0-9_%\-]+=[^;]+)/);
-      }
-    }
-
-    const currentMap = new Map();
-    if (this.cookieHeader) {
-      this.cookieHeader.split(';').forEach((pair) => {
-        const [k, v] = pair.split('=').map((s) => s.trim());
-        if (k && v) currentMap.set(k, v);
-      });
-    }
-
-    for (const headerStr of setCookieHeaders) {
-      const firstPair = headerStr.split(';')[0].trim();
-      const eqIdx = firstPair.indexOf('=');
-      if (eqIdx > 0) {
-        const k = firstPair.slice(0, eqIdx).trim();
-        const v = firstPair.slice(eqIdx + 1).trim();
-        if (k && v) currentMap.set(k, v);
-      }
-    }
-
-    const merged = [];
-    currentMap.forEach((v, k) => merged.push(`${k}=${v}`));
-    this.cookieHeader = merged.join('; ');
+    this.cookieHeader = updateCookieHeader(this.cookieHeader, responseHeaders);
   }
 
   /**
@@ -75,7 +43,6 @@ export class PmaClient {
     }
 
     try {
-      // Step 1: Initial GET to obtain session cookie & CSRF token
       let currentUrl = this.getEndpoint('index.php');
       let initRes = await safeFetch(currentUrl, {
         method: 'GET',
@@ -86,7 +53,6 @@ export class PmaClient {
 
       let initHtml = await initRes.text();
 
-      // Check if response contains HTML meta-refresh redirect (e.g. redirecting to ./public/)
       const metaRedirect = initHtml.match(/<meta[^>]*http-equiv=["']?Refresh["']?[^>]*content=["'][^"']*url=([^"';\s>]+)/i) ||
                            initHtml.match(/(?:window\.)?location(?:\.href)?\s*=\s*(?:decodeURI\()?["']([^"']+)["']/i) ||
                            initHtml.match(/location\.replace\s*\(\s*["']([^"']+)["']/i);
@@ -103,135 +69,83 @@ export class PmaClient {
           },
         });
         initHtml = await initRes.text();
+        currentUrl = resolvedUrl;
       }
 
-      this.token = this.extractTokenFromHtml(initHtml);
       this.updateCookies(initRes.headers);
+      this.token = extractTokenFromHtml(initHtml);
 
-      // Step 2: Check if session is already authenticated or credentials provided
-      const isAlreadyAuth = (initHtml.includes('id="pma_navigation"') ||
-                             initHtml.includes("id='pma_navigation'") ||
-                             initHtml.includes('floating_user') ||
-                             initHtml.includes('serverinfo') ||
-                             initHtml.includes('route=/server/databases') ||
-                             initHtml.includes('db_structure.php') ||
-                             initHtml.includes('id="pma_console"') ||
-                             initHtml.includes('navigation_tree')) &&
-                            !initHtml.includes('name="pma_password"') &&
-                            !initHtml.includes('id="input_password"');
+      const loginEndpoints = [
+        this.getEndpoint('index.php?route=/'),
+        this.getEndpoint('index.php'),
+      ];
 
-      if (this.username && !isAlreadyAuth) {
-        const formActionMatch = initHtml.match(/<form[^>]+id=["']login_form["'][^>]*action=["']([^"']+)["']/i) ||
-                                initHtml.match(/<form[^>]*action=["']([^"']+)["']/i);
-        let formAction = formActionMatch ? formActionMatch[1] : 'index.php';
-        if (formAction.includes('route=/login')) formAction = 'index.php';
-        const loginUrl = new URL(formAction, currentUrl).href;
+      let lastError = null;
 
-        const formData = new URLSearchParams();
-        formData.append('pma_username', this.username);
-        formData.append('pma_password', this.password);
+      for (const loginUrl of loginEndpoints) {
+        try {
+          const body = new URLSearchParams();
+          body.append('pma_username', this.username);
+          body.append('pma_password', this.password);
+          body.append('server', '1');
+          body.append('target', 'index.php');
+          if (this.token) {
+            body.append('token', this.token);
+            body.append('set_session', this.token);
+          }
 
-        // Extract hidden inputs from initial HTML: set_session, token, server, target
-        const setSessionMatch = initHtml.match(/name=["']set_session["']\s+value=["']([^"']+)["']/i) ||
-                                initHtml.match(/value=["']([^"']+)["']\s+name=["']set_session["']/i);
-        if (setSessionMatch && setSessionMatch[1]) {
-          formData.append('set_session', setSessionMatch[1]);
-        }
+          const loginRes = await safeFetch(loginUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) DB-Sync-Client/1.0',
+              ...(this.cookieHeader ? { Cookie: this.cookieHeader } : {}),
+            },
+            body: body.toString(),
+          });
 
-        const serverMatch = initHtml.match(/name=["']server["']\s+value=["']([^"']+)["']/i) ||
-                            initHtml.match(/value=["']([^"']+)["']\s+name=["']server["']/i);
-        formData.append('server', serverMatch ? serverMatch[1] : '1');
+          this.updateCookies(loginRes.headers);
+          const loginHtml = await loginRes.text();
 
-        const targetMatch = initHtml.match(/name=["']target["']\s+value=["']([^"']+)["']/i) ||
-                            initHtml.match(/value=["']([^"']+)["']\s+name=["']target["']/i);
-        formData.append('target', targetMatch ? targetMatch[1] : 'index.php');
+          const newToken = extractTokenFromHtml(loginHtml);
+          if (newToken) {
+            this.token = newToken;
+          }
 
-        if (this.database) formData.append('db', this.database);
-        if (this.token) formData.append('token', this.token);
+          const pmaError = extractPmaError(loginHtml);
+          if (pmaError) {
+            lastError = new Error(pmaError);
+            continue;
+          }
 
-        const headers = {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) DB-Sync-Client/1.0',
-        };
-        if (this.cookieHeader) {
-          headers['Cookie'] = this.cookieHeader;
-        }
+          const isSuccess =
+            loginRes.status === 200 ||
+            loginRes.status === 302 ||
+            loginHtml.includes('database_structure') ||
+            loginHtml.includes('server_databases') ||
+            loginHtml.includes('server_status') ||
+            loginHtml.includes('pma_navigation') ||
+            loginHtml.includes('logout') ||
+            loginHtml.includes('Log out');
 
-        let loginRes = await safeFetch(loginUrl, {
-          method: 'POST',
-          headers,
-          body: formData.toString(),
-        });
+          if (isSuccess) {
+            return {
+              success: true,
+              message: 'Autentikasi PMA berhasil.',
+              token: this.token,
+            };
+          }
 
-        let loginHtml = await loginRes.text();
-        this.updateCookies(loginRes.headers);
-        const newToken = this.extractTokenFromHtml(loginHtml);
-        if (newToken) {
-          this.token = newToken;
-        }
-
-        const isAuthSuccess = loginHtml.includes('pma_navigation') ||
-                              loginHtml.includes('floating_user') ||
-                              loginHtml.includes('serverinfo') ||
-                              loginHtml.includes('databases') ||
-                              loginHtml.includes('"success":true');
-        const hasPasswordField = loginHtml.includes('name="pma_password"') || loginHtml.includes('id="input_password"');
-
-        if (hasPasswordField && !isAuthSuccess) {
-          const errText = this.extractPmaError(loginHtml);
-          throw new Error(`Login PMA Gagal: ${errText || 'Kredensial ditolak atau form login masih tampil'}`);
+          lastError = new Error('Gagal login ke PhpMyAdmin (Autentikasi ditolak)');
+        } catch (err) {
+          lastError = err;
         }
       }
 
-      return {
-        success: true,
-        message: 'Koneksi ke PhpMyAdmin remote berhasil diinisialisasi.',
-        token: this.token,
-      };
+      throw lastError || new Error('Autentikasi gagal pada semua endpoint login PMA.');
     } catch (err) {
-      const msg = err?.message || (typeof err === 'string' ? err : JSON.stringify(err));
-      throw new Error(`Gagal terhubung ke PMA (${this.baseUrl}): ${msg}`);
+      throw new Error(`Koneksi PMA gagal: ${err.message || err}`);
     }
-  }
-
-  /**
-   * Helper to parse error banner from PMA HTML response, stripping noscript and template alerts
-   */
-  extractPmaError(html) {
-    if (!html) return '';
-    const cleanHtml = html.replace(/<noscript[\s\S]*?<\/noscript>/gi, '');
-    const matches = cleanHtml.matchAll(/class=["'](?:alert alert-danger|error|message error)["'][^>]*>([\s\S]*?)<\/div>/gi);
-    for (const match of matches) {
-      const text = match[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-      if (text &&
-          !text.includes('Javascript must be enabled') &&
-          !text.includes('mismatch between HTTPS') &&
-          text.length < 500) {
-        return text;
-      }
-    }
-    if (cleanHtml.includes('Cannot log in to the database server') || cleanHtml.includes('Cannot log in to the MySQL server')) {
-      return 'Cannot log in to the database server (koneksi MySQL ditolak)';
-    }
-    if (cleanHtml.includes('Access denied')) {
-      return 'Access denied (Username atau Password salah)';
-    }
-    return '';
-  }
-
-  /**
-   * Helper to parse CSRF token from PMA HTML responses
-   */
-  extractTokenFromHtml(html) {
-    if (!html) return '';
-    const tokenMatch = html.match(/name=["']token["']\s+value=["']([^"']+)["']/i) ||
-                       html.match(/value=["']([^"']+)["']\s+name=["']token["']/i) ||
-                       html.match(/data-token=["']([^"']+)["']/i) ||
-                       html.match(/["']token["']:\s*["']([^"']+)["']/i) ||
-                       html.match(/CommonParams\.set\(\s*["']token["']\s*,\s*["']([^"']+)["']/i) ||
-                       html.match(/token=([a-zA-Z0-9_-]{16,})/i) ||
-                       html.match(/pma_token\s*=\s*["']([^"']+)["']/i);
-    return tokenMatch ? tokenMatch[1] : '';
   }
 
   /**
@@ -242,32 +156,8 @@ export class PmaClient {
       throw new Error('Nama database remote PMA belum dikonfigurasi.');
     }
 
-    const isValidTableName = (name) => {
-      if (!name || typeof name !== 'string') return false;
-      const n = name.trim();
-      if (n.length < 2 || n.length > 64) return false;
-      if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(n)) return false;
-      const reserved = new Set([
-        'phpmyadmin', 'index', 'true', 'false', 'select', 'structure',
-        'sql', 'export', 'import', 'checkall', 'select_all', 'uncheck_all',
-        'none', 'null', 'yes', 'no', 'ok', 'on', 'off', 'go',
-        'db', 'server', 'action', 'table', 'tables', 'table_name', 'tables_in',
-        'view', 'views', 'all', 'new', 'browse', 'search', 'empty', 'drop', 'operations',
-        'ansi', 'db2', 'maxdb', 'mssql', 'mysql323', 'mysql40', 'oracle',
-        'traditional', 'insert', 'replace', 'update', 'structure_and_data',
-        'texytext', 'textext', 'toon', 'win', 'xml', 'yaml', 'zip',
-        'gzip', 'bzip2', 'codegen', 'csv', 'excel', 'htmldir', 'htmlword',
-        'json', 'latex', 'mediawiki', 'ods', 'odt', 'pdf', 'phparray',
-        'shift_jis', 'sjis', 'utf8', 'utf8mb4', 'latin1', 'ascii',
-        'quick', 'custom', 'quick_export', 'sendit', 'asfile',
-      ]);
-      return !reserved.has(n.toLowerCase());
-    };
-
     let rawRows = [];
     const escapedDb = this.database.replace(/`/g, '``').replace(/'/g, "''");
-
-    // Query 1: case-insensitive INFORMATION_SCHEMA match
     const infoQuery = `SELECT TABLE_NAME FROM information_schema.TABLES WHERE LOWER(TABLE_SCHEMA) = LOWER('${escapedDb}') ORDER BY TABLE_NAME LIMIT 100000`;
 
     try {
@@ -292,7 +182,6 @@ export class PmaClient {
       console.warn('[fetchTablesList] information_schema query failed:', err.message);
     }
 
-    // Query 2: SHOW FULL TABLES for BASE TABLE
     if (!rawRows || rawRows.length === 0) {
       try {
         rawRows = await this.executePmaAjaxSql(`SHOW FULL TABLES FROM \`${escapedDb}\` WHERE Table_type = 'BASE TABLE'`);
@@ -301,7 +190,6 @@ export class PmaClient {
       }
     }
 
-    // Query 3: SHOW TABLES
     if (!rawRows || rawRows.length === 0) {
       try {
         rawRows = await this.executePmaAjaxSql(`SHOW TABLES FROM \`${escapedDb}\``);
@@ -320,64 +208,24 @@ export class PmaClient {
           this.getEndpoint(`navigation.php?db=${encodeURIComponent(this.database)}&server=1${tokenParam}`),
           this.getEndpoint(`index.php?route=/database/export&db=${encodeURIComponent(this.database)}&server=1&export_type=database${tokenParam}`),
           this.getEndpoint(`export.php?db=${encodeURIComponent(this.database)}&server=1&export_type=database${tokenParam}`),
-          this.getEndpoint(`index.php?db=${encodeURIComponent(this.database)}&server=1${tokenParam}`),
-          this.getEndpoint(`index.php?route=/database/structure&db=${encodeURIComponent(this.database)}${tokenParam}`),
-          this.getEndpoint(`db_structure.php?db=${encodeURIComponent(this.database)}${tokenParam}`),
-          this.getEndpoint(`export.php?db=${encodeURIComponent(this.database)}${tokenParam}`),
         ];
 
         const headers = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' };
         if (this.cookieHeader) headers.Cookie = this.cookieHeader;
 
-        const tableNames = new Set();
         for (const url of candidateUrls) {
           try {
             const databaseRes = await safeFetch(url, { method: 'GET', headers });
             const databaseHtml = await databaseRes.text();
-
-            // Pattern 1: data-table="..." or data-filter-row="..."
-            for (const match of databaseHtml.matchAll(/(?:data-table|data-name|data-filter-row)="([^"]+)"/gi)) {
-              if (isValidTableName(match[1])) tableNames.add(match[1].trim());
+            const extracted = extractTablesFromHtmlFallback(databaseHtml);
+            if (extracted.size > 0) {
+              rawRows = Array.from(extracted, (table_name) => ({ table_name }));
+              break;
             }
-
-            // Pattern 2: options inside <select name="table_select[]"> block
-            const tableSelectMatch = databaseHtml.match(/<select[^>]*name=["']table_select[^"']*["'][^>]*>([\s\S]*?)<\/select>/i);
-            if (tableSelectMatch && tableSelectMatch[1]) {
-              for (const match of tableSelectMatch[1].matchAll(/value=["']([^"']+)["']/gi)) {
-                if (isValidTableName(match[1])) tableNames.add(match[1].trim());
-              }
-            }
-
-            // Pattern 3: selected_tbl checkboxes
-            for (const match of databaseHtml.matchAll(/(?:selected_tbl|table_select|table_structure|table_data)[^>]*value=["']([^"']+)["']/gi)) {
-              if (isValidTableName(match[1])) tableNames.add(match[1].trim());
-            }
-            for (const match of databaseHtml.matchAll(/value=["']([^"']+)["'][^>]*(?:selected_tbl|table_select)/gi)) {
-              if (isValidTableName(match[1])) tableNames.add(match[1].trim());
-            }
-
-            // Pattern 4: table= in query strings
-            for (const match of databaseHtml.matchAll(/[?&](?:table|dbtable)=([a-zA-Z_][a-zA-Z0-9_]*)/gi)) {
-              if (isValidTableName(match[1])) tableNames.add(match[1].trim());
-            }
-
-            // Pattern 5: table results cells
-            for (const match of databaseHtml.matchAll(/<td[^>]*class=["'][^"']*data[^"']*["'][^>]*>(?:<[^>]+>)*\s*([a-zA-Z0-9_]{2,64})\s*(?:<\/[^>]+>)*<\/td>/gi)) {
-              if (isValidTableName(match[1])) tableNames.add(match[1].trim());
-            }
-
-            // Pattern 6: navigation hover title
-            for (const match of databaseHtml.matchAll(/hover_show_full[^>]*title=["']([^"']+)["']/gi)) {
-              if (isValidTableName(match[1])) tableNames.add(match[1].trim());
-            }
-
-            if (tableNames.size > 0) break;
           } catch (e) {
             console.warn(`[fetchTablesList] URL ${url} failed:`, e.message);
           }
         }
-
-        rawRows = Array.from(tableNames, (table_name) => ({ table_name }));
       } catch (err) {
         console.warn('[fetchTablesList] database page fallback failed:', err.message);
       }
@@ -403,39 +251,7 @@ export class PmaClient {
   }
 
   /**
-   * Extract table names from PMA database structure JSON payload.
-   */
-  _extractTablesFromStructureJson(payload) {
-    const tables = [];
-    const walk = (value) => {
-      if (!value) return;
-      if (Array.isArray(value)) {
-        value.forEach(walk);
-        return;
-      }
-      if (typeof value !== 'object') return;
-
-      const directName = value.table_name || value.TABLE_NAME || value.Name || value.name || value.Table || value.table || null;
-      if (typeof directName === 'string' && directName.trim()) {
-        tables.push(directName.trim());
-      }
-
-      for (const key of Object.keys(value)) {
-        const nested = value[key];
-        if (key === 'tables' || key === 'tbl_group' || key === 'data' || key === 'rows' || key === 'results' || key === 'items') {
-          walk(nested);
-        } else if (nested && typeof nested === 'object') {
-          walk(nested);
-        }
-      }
-    };
-
-    walk(payload);
-    return Array.from(new Set(tables)).map((t) => ({ table_name: t }));
-  }
-
-  /**
-   * Execute SQL query via PMA AJAX SQL execution route (used as fallback for table listing).
+   * Execute SQL query via PMA AJAX SQL execution route
    */
   async executePmaAjaxSql(sqlQuery) {
     const endpoints = [
@@ -460,15 +276,14 @@ export class PmaClient {
       'Content-Type': 'application/x-www-form-urlencoded',
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
       'X-Requested-With': 'XMLHttpRequest',
+      ...(this.cookieHeader ? { Cookie: this.cookieHeader } : {}),
     };
-    if (this.cookieHeader) headers['Cookie'] = this.cookieHeader;
 
-    let res = null;
     let rawText = '';
 
     for (const sqlUrl of endpoints) {
       try {
-        res = await safeFetch(sqlUrl, {
+        const res = await safeFetch(sqlUrl, {
           method: 'POST',
           headers,
           body: formData.toString(),
@@ -488,7 +303,6 @@ export class PmaClient {
     try {
       resData = JSON.parse(rawText);
     } catch (_) {
-      // If raw response is HTML
       const htmlMatches = new Set();
       for (const m of rawText.matchAll(/<td[^>]*class=["'][^"']*data[^"']*["'][^>]*>(?:<[^>]+>)*\s*([a-zA-Z0-9_]{2,64})\s*(?:<\/[^>]+>)*<\/td>/gi)) {
         htmlMatches.add(m[1].trim());
@@ -500,11 +314,9 @@ export class PmaClient {
 
     if (resData.success === false) {
       const errMsg = resData.error || resData.message || 'Unknown PMA error';
-      const plainErr = errMsg.replace(/<[^>]*>/g, '').trim();
-      throw new Error(plainErr);
+      throw new Error(errMsg.replace(/<[^>]*>/g, '').trim());
     }
 
-    // Check if resData.message contains HTML table results
     if (typeof resData.message === 'string' && resData.message.includes('<')) {
       const htmlMatches = new Set();
       for (const m of resData.message.matchAll(/<td[^>]*class=["'][^"']*data[^"']*["'][^>]*>(?:<[^>]+>)*\s*([a-zA-Z0-9_]{2,64})\s*(?:<\/[^>]+>)*<\/td>/gi)) {
@@ -539,11 +351,6 @@ export class PmaClient {
       return [];
     };
 
-    const normalizedRows = normalizeRows(resData);
-    if (normalizedRows.length) return normalizedRows;
-
-    console.warn('[PMA] executePmaAjaxSql: unrecognized response shape', Object.keys(resData));
-    return [];
+    return normalizeRows(resData);
   }
-
 }
