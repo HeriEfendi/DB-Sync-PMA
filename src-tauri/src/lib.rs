@@ -1,6 +1,9 @@
-mod commands;
-mod pma_export;
-mod process_utils;
+pub mod models;
+pub mod utils;
+pub mod repository;
+pub mod commands;
+pub mod pma_export;
+pub mod process_utils;
 
 pub use commands::*;
 pub use pma_export::*;
