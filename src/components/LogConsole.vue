@@ -59,7 +59,7 @@
       </div>
 
       <!-- Bottom spacer to prevent text clipping against bottom edge -->
-      <div class="log-bottom-spacer" style="height: 24px; min-height: 24px; flex-shrink: 0;" aria-hidden="true"></div>
+      <div class="log-bottom-spacer" style="height: 10px; min-height: 10px; flex-shrink: 0;" aria-hidden="true"></div>
     </div>
   </div>
 </template>
