@@ -57,6 +57,9 @@
         <span class="log-level-badge">{{ (log.type === 'warn' ? 'WARNING' : log.type).toUpperCase() }}</span>
         <span class="log-msg">{{ log.message }}</span>
       </div>
+
+      <!-- Bottom spacer to prevent text clipping against bottom edge -->
+      <div class="log-bottom-spacer" style="height: 24px; min-height: 24px; flex-shrink: 0;" aria-hidden="true"></div>
     </div>
   </div>
 </template>
