@@ -9,7 +9,7 @@ export function useSyncLogs() {
     const timestamp = typeof rawTs === 'string' ? rawTs.replace(/\./g, ':') : rawTs;
     const normalizedEntry = { ...entry, timestamp };
     const msg = normalizedEntry.message || '';
-    const tableMatch = msg.match(/\[Tabel\s+'([^']+)'\]/);
+    const tableMatch = msg.match(/\[(?:Tabel|Cleanup)\s+'([^']+)'\]/i);
     const tableName = tableMatch ? tableMatch[1] : (normalizedEntry.tableName || null);
 
     const isTransientProgress =
@@ -17,18 +17,21 @@ export function useSyncLogs() {
       msg.includes('Menunggu server remote PMA') ||
       msg.includes('Mengalirkan ke MySQL:') ||
       msg.includes('Mengunduh dalam cicilan') ||
-      msg.includes('selesai diunduh: ~');
+      msg.includes('selesai diunduh: ~') ||
+      msg.includes('row akan dihapus') ||
+      msg.includes('Batch ');
 
     const isTableFinished =
       entry.type === 'success' ||
-      msg.includes('Selesai!') ||
+      msg.toLowerCase().includes('selesai') ||
       msg.includes('Struktur tabel berhasil dibuat') ||
       msg.includes('Auto-fallback Fresh Sync') ||
       msg.includes('Melewati proses import lokal') ||
       msg.includes('Di-skip pada sinkronisasi') ||
       msg.includes('Export GAGAL') ||
       msg.includes('MySQL CLI import error') ||
-      msg.includes('Gagal:');
+      msg.includes('Gagal:') ||
+      msg.includes('Melewati tabel ini');
 
     if (tableName && isTransientProgress) {
       const existingIdx = logs.value.findIndex(
@@ -53,13 +56,16 @@ export function useSyncLogs() {
     }
 
     if (tableName && isTableFinished) {
+      // Hapus log sementara (transient) dan semua log INFO perantara untuk tabel ini
+      // baik dari proses Tabel sync maupun Cleanup, agar histori log konsol tetap bersih dan ringkas
       logs.value = logs.value.filter(
-        (l) =>
-          !(
-            (l.tableName === tableName ||
-              (l.message && l.message.includes(`[Tabel '${tableName}']`))) &&
-            (l.isTransient || l.type === 'info')
-          )
+        (l) => {
+          const isSameTable =
+            l.tableName === tableName ||
+            (l.message && l.message.includes(`'${tableName}'`));
+          const isIntermediate = l.isTransient || l.type === 'info';
+          return !(isSameTable && isIntermediate);
+        }
       );
     }
 
