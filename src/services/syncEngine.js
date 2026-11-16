@@ -177,8 +177,7 @@ export class SyncEngine {
             await safeInvoke('batch_cleanup_incremental', {
               config: localConfig,
               watermarks: cleanupWatermarks,
-              batchSize: 50000,
-              concurrency: 3,
+              concurrency: 4,
             });
           } catch (cleanupErr) {
             this.log('warning', `Batch cleanup error (non-fatal): ${cleanupErr?.message || cleanupErr}`);
