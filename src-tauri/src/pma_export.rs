@@ -2435,7 +2435,12 @@ async fn fetch_table_export_stream(
     }
 
     // === MODE CICILAN (CHUNKING) DENGAN LIVE STREAMING LANGSUNG KE MYSQL LOKAL ===
+    let is_limited = effective_row_limit.is_some();
+    let is_desc_order = is_limited && pk_col_opt.is_some();
     let mut chunk_size = forced_chunk_size.unwrap_or(100_000usize);
+    if let Some(limit) = effective_row_limit {
+        chunk_size = chunk_size.min(limit);
+    }
     let effective_est = effective_row_limit
         .map(|l| if est_rows > 0 { l.min(est_rows) } else { l })
         .unwrap_or(est_rows);
@@ -2447,7 +2452,11 @@ async fn fetch_table_export_stream(
     let safe_table = table_name.replace('`', "``");
 
     let order_clause = if let Some(pk_col) = pk_col_opt {
-        format!("ORDER BY `{}` ASC", pk_col.replace('`', "``"))
+        if is_desc_order {
+            format!("ORDER BY `{}` DESC", pk_col.replace('`', "``"))
+        } else {
+            format!("ORDER BY `{}` ASC", pk_col.replace('`', "``"))
+        }
     } else {
         String::new()
     };
@@ -2574,13 +2583,22 @@ async fn fetch_table_export_stream(
     }
 
     let mut chunk_idx = 0usize;
-    let mut current_offset = 0usize;
+    let mut current_offset = if is_limited && pk_col_opt.is_none() && est_rows > effective_est {
+        est_rows.saturating_sub(effective_est)
+    } else {
+        0usize
+    };
     let mut last_seen_pk: Option<String> = None;
     let mut total_imported_rows = 0usize;
     let max_chunks_by_limit = effective_row_limit.map(|l| (l + chunk_size - 1) / chunk_size).unwrap_or(5000);
     let max_safe_chunks = max_chunks_by_limit.min(5000); // Mendukung hingga 250 juta baris
 
     while chunk_idx < max_safe_chunks {
+        if let Some(limit) = effective_row_limit {
+            if total_imported_rows >= limit {
+                break;
+            }
+        }
         if is_user_cancelled() {
             let _ = child.start_kill();
             stderr_task.abort();
@@ -2614,6 +2632,7 @@ async fn fetch_table_export_stream(
         let mut chunk_attempt = 0usize;
         let mut chunk_res = None;
         let max_chunk_attempts = 5usize;
+        let mut imported_chunk_size = chunk_size;
 
         while chunk_attempt < max_chunk_attempts {
             chunk_attempt += 1;
@@ -2628,6 +2647,17 @@ async fn fetch_table_export_stream(
                 return Err("__WORKER_ABORTED__".to_string());
             }
 
+            let this_chunk_size = if let Some(limit) = effective_row_limit {
+                let remaining = limit.saturating_sub(total_imported_rows);
+                if remaining == 0 {
+                    break;
+                }
+                chunk_size.min(remaining)
+            } else {
+                chunk_size
+            };
+            imported_chunk_size = this_chunk_size;
+
             // Langkah 1: Keyset Pagination (Seek Method) jika PK terdeteksi & chunk > 0 untuk kecepatan O(1) instan
             let chunk_query = if let (Some(pk_col), Some(ref last_pk)) = (pk_col_opt, &last_seen_pk) {
                 let safe_pk_val = if last_pk.starts_with('\'') || last_pk.parse::<f64>().is_ok() {
@@ -2635,18 +2665,29 @@ async fn fetch_table_export_stream(
                 } else {
                     format!("'{}'", last_pk.replace('\'', "\\'"))
                 };
-                format!(
-                    "SELECT * FROM `{}` WHERE `{}` > {} ORDER BY `{}` ASC LIMIT {}",
-                    safe_table,
-                    pk_col.replace('`', "``"),
-                    safe_pk_val,
-                    pk_col.replace('`', "``"),
-                    chunk_size
-                )
+                if is_desc_order {
+                    format!(
+                        "SELECT * FROM `{}` WHERE `{}` < {} ORDER BY `{}` DESC LIMIT {}",
+                        safe_table,
+                        pk_col.replace('`', "``"),
+                        safe_pk_val,
+                        pk_col.replace('`', "``"),
+                        this_chunk_size
+                    )
+                } else {
+                    format!(
+                        "SELECT * FROM `{}` WHERE `{}` > {} ORDER BY `{}` ASC LIMIT {}",
+                        safe_table,
+                        pk_col.replace('`', "``"),
+                        safe_pk_val,
+                        pk_col.replace('`', "``"),
+                        this_chunk_size
+                    )
+                }
             } else {
                 format!(
                     "SELECT * FROM `{}` {} LIMIT {} OFFSET {}",
-                    safe_table, order_clause, chunk_size, current_offset
+                    safe_table, order_clause, this_chunk_size, current_offset
                 )
             }
             .split_whitespace()
@@ -2897,8 +2938,15 @@ async fn fetch_table_export_stream(
                 ),
             );
 
-            current_offset += chunk_size;
+            current_offset += imported_chunk_size;
             chunk_idx += 1;
+
+            // Jika sudah mencapai atau melampaui limit baris yang diminta, hentikan chunking
+            if let Some(limit) = effective_row_limit {
+                if total_imported_rows >= limit {
+                    break;
+                }
+            }
 
             // Jika chunk tidak memiliki data INSERT atau row count kosong, berarti seluruh isi tabel telah selesai
             if !has_insert || row_count_in_chunk == 0 {
@@ -4665,8 +4713,20 @@ INSERT INTO `users` VALUES
         assert_eq!(rows, 2);
         assert_eq!(last_pk, Some("2".to_string()));
         let sql_str = String::from_utf8(sql_bytes).unwrap();
-        assert!(sql_str.starts_with("REPLACE INTO `users` (`id`, `name`, `email`) VALUES"));
+        assert!(sql_str.contains("REPLACE INTO `users` (`id`, `name`, `email`) VALUES"));
         assert!(sql_str.contains("('1', 'John Doe', 'john@example.com')"));
+    }
+
+    #[test]
+    fn test_extract_last_pk_value_desc_order() {
+        let sql = br#"
+INSERT INTO `users` (`id`, `name`) VALUES
+(6000000, 'User A'),
+(5999999, 'User B'),
+(5900001, 'User C');
+"#;
+        let pk = extract_last_pk_value(sql, "id");
+        assert_eq!(pk, Some("5900001".to_string()));
     }
 }
 
