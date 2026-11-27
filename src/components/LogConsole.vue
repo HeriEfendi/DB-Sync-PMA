@@ -8,6 +8,16 @@
           Console Log Sinkronisasi
         </span>
         <span class="log-count">({{ filteredLogs.length }} entri)</span>
+        <button
+          v-if="tableFilter"
+          type="button"
+          class="inline-flex items-center gap-1 rounded bg-[#2563eb]/20 px-2 py-0.5 text-[11px] font-medium text-[#93c5fd] ring-1 ring-[#3b82f6]/40 hover:bg-[#2563eb]/30"
+          title="Klik untuk hapus filter tabel"
+          @click="$emit('clear-table-filter')"
+        >
+          <span class="font-mono">{{ tableFilter }}</span>
+          <span>×</span>
+        </button>
       </div>
 
       <!-- Filter Buttons & Search -->
@@ -69,9 +79,10 @@ import { ref, computed, watch, nextTick } from 'vue';
 
 const props = defineProps({
   logs: { type: Array, default: () => [] },
+  tableFilter: { type: String, default: '' },
 });
 
-defineEmits(['clear-logs']);
+defineEmits(['clear-logs', 'clear-table-filter']);
 
 const logContainer = ref(null);
 const currentFilter = ref('all');
@@ -111,9 +122,16 @@ const filteredLogs = computed(() => {
 
   // Apply filter & search on top of the trimmed set
   const result = [];
+  const tblFilter = props.tableFilter ? props.tableFilter.trim() : '';
   for (const { log } of trimmed) {
     const normalizedType = log.type === 'warn' ? 'warning' : log.type;
     if (filter !== 'all' && normalizedType !== filter) continue;
+    if (tblFilter) {
+      const matchesTable =
+        log.tableName === tblFilter ||
+        (log.message && log.message.includes(`'${tblFilter}'`));
+      if (!matchesTable) continue;
+    }
     if (query && !log.message.toLowerCase().includes(query)) continue;
     result.push(log);
   }

@@ -8,7 +8,7 @@
       @click.self="$emit('close')"
     >
       <section
-        class="console-dialog"
+        class="console-dialog !max-w-[1180px]"
         role="dialog"
         aria-modal="true"
         aria-label="Console log sinkronisasi"
@@ -40,8 +40,21 @@
             </button>
           </div>
         </header>
-        <div class="floating-console-content">
-          <LogConsole :logs="logs" @clear-logs="$emit('clear-logs')" />
+        <div class="floating-console-content flex flex-col overflow-hidden md:flex-row">
+          <div class="min-h-0 min-w-0 flex-1 flex flex-col">
+            <LogConsole
+              class="!h-full !min-h-0 !max-h-none !rounded-none !border-0 flex-1"
+              :logs="logs"
+              :table-filter="selectedLogTable"
+              @clear-table-filter="selectedLogTable = ''"
+              @clear-logs="$emit('clear-logs')"
+            />
+          </div>
+          <SyncTableStatusSidebar
+            :tables="resolvedTables"
+            :selected-table="selectedLogTable"
+            @select-table="selectedLogTable = $event"
+          />
         </div>
       </section>
     </div>
@@ -86,15 +99,32 @@
 </template>
 
 <script setup>
+import { computed, ref } from 'vue';
 import LogConsole from '../LogConsole.vue';
+import SyncTableStatusSidebar from './SyncTableStatusSidebar.vue';
 
-defineProps({
+const props = defineProps({
   show: { type: Boolean, default: false },
   minimized: { type: Boolean, default: false },
   isSyncing: { type: Boolean, default: false },
   logs: { type: Array, default: () => [] },
+  tableStatuses: { type: Array, default: () => [] },
+  selectedTables: { type: Array, default: () => [] },
 });
 
 defineEmits(['close', 'update:minimized', 'clear-logs']);
+
+const selectedLogTable = ref('');
+
+const resolvedTables = computed(() => {
+  if (props.tableStatuses && props.tableStatuses.length > 0) {
+    return props.tableStatuses;
+  }
+  return (props.selectedTables || []).map((t) => ({
+    name: typeof t === 'string' ? t : t.name,
+    status: 'pending',
+    detail: 'Siap disinkronkan',
+  }));
+});
 </script>
 

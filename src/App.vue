@@ -92,6 +92,8 @@
             v-model:minimized="consoleMinimized"
             :is-syncing="isSyncing"
             :logs="logs"
+            :table-statuses="syncTableStatuses"
+            :selected-tables="selectedTables"
             @close="showConsoleModal = false"
             @clear-logs="clearLogs"
           />
@@ -186,6 +188,7 @@ const {
   testingLocal,
   stats,
   syncProgress,
+  syncTableStatuses,
   testPmaConnection,
   testLocalConnection,
   handleStartSync,

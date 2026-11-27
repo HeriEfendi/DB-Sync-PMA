@@ -38,6 +38,75 @@ export function useSyncRunner({
     totalSyncedAllTables: 0,
     status: 'idle',
   });
+  const syncTableStatuses = ref([]);
+
+  const updateTableStatusFromLog = (entry) => {
+    if (!entry || syncTableStatuses.value.length === 0) return;
+    const msg = entry.message || '';
+    const tableMatch = msg.match(/\[(?:Tabel|Cleanup)\s+'([^']+)'\]/i) || msg.match(/tabel\s+'([^']+)'/i);
+    const tableName = tableMatch ? tableMatch[1] : entry.tableName;
+    if (!tableName) return;
+
+    const target = syncTableStatuses.value.find((item) => item.name === tableName);
+    if (!target) return;
+
+    const isSkipped =
+      msg.includes('Di-skip') ||
+      msg.includes('Melewati tabel ini') ||
+      msg.includes('Melewati proses import lokal');
+    const isFailed =
+      entry.type === 'error' ||
+      msg.includes('Export GAGAL') ||
+      msg.includes('MySQL import error') ||
+      msg.includes('MySQL CLI import error') ||
+      msg.includes('Auto-fallback Fresh Sync gagal');
+    const isCompleted =
+      entry.type === 'success' ||
+      msg.includes('Sinkronisasi selesai') ||
+      msg.includes('Struktur tabel berhasil dibuat');
+
+    if (isFailed) {
+      target.status = 'failed';
+      target.detail = msg.replace(/^\[[^\]]+\]\s*/, '').slice(0, 120);
+      return;
+    }
+
+    if (isSkipped) {
+      target.status = 'skipped';
+      target.detail = 'Dilewati';
+      return;
+    }
+
+    if (isCompleted) {
+      target.status = 'completed';
+      const rowsMatch = msg.match(/~?([\d.,]+)\s+row/i);
+      const timeMatch = msg.match(/\(([\d.,]+s)\)/);
+      if (rowsMatch && timeMatch) {
+        target.detail = `~${rowsMatch[1]} row (${timeMatch[1]})`;
+      } else if (rowsMatch) {
+        target.detail = `~${rowsMatch[1]} row`;
+      } else {
+        target.detail = 'Selesai';
+      }
+      return;
+    }
+
+    if (target.status === 'pending' || target.status === 'processing') {
+      target.status = 'processing';
+      const chunkMatch = msg.match(/(Chunk\s+\d+\/\d+|Chunk\s+\d+)/i);
+      if (chunkMatch) {
+        target.detail = chunkMatch[1];
+      } else if (msg.includes('Mengalirkan')) {
+        target.detail = 'Mengalirkan ke MySQL...';
+      } else if (msg.includes('Mengunduh')) {
+        target.detail = 'Mengunduh data...';
+      } else if (msg.includes('Menyiapkan')) {
+        target.detail = 'Menyiapkan struktur...';
+      } else if (msg.includes('Auto-fallback Fresh Sync')) {
+        target.detail = 'Auto-fallback Fresh Sync...';
+      }
+    }
+  };
 
   let activeEngineInstance = null;
 
@@ -166,6 +235,12 @@ export function useSyncRunner({
       message: `Memproses ${expectedTotal} tabel dengan mode ${syncMode.value === 'fresh' ? 'Fresh Sync' : 'Sync Server'}.`,
     });
     isSyncing.value = true;
+    syncTableStatuses.value = tablesToSync.map((t) => ({
+      name: typeof t === 'string' ? t : t.name,
+      status: 'pending',
+      detail: 'Menunggu antrean',
+      rows: 0,
+    }));
     syncProgress.value = {
       currentTableIndex: 0,
       totalTables: expectedTotal,
@@ -176,9 +251,19 @@ export function useSyncRunner({
     };
 
     const engine = new SyncEngine(pmaConfig.value, localConfig.value, {
-      onLog: addLog,
+      onLog: (entry) => {
+        updateTableStatusFromLog(entry);
+        addLog(entry);
+      },
       onTableSynced: refreshTableStates,
       onProgress: (p) => {
+        if (p.currentTableName) {
+          const item = syncTableStatuses.value.find((t) => t.name === p.currentTableName);
+          if (item && item.status === 'pending') {
+            item.status = 'processing';
+            item.detail = 'Memproses...';
+          }
+        }
         const rowsCount = p.rowsSyncedCurrentTable ?? p.rowsSyncedForCurrentTable ?? 0;
         const rawTableIndex = p.currentTableIndex || 0;
         const safeTableIndex = Math.min(
@@ -224,7 +309,25 @@ export function useSyncRunner({
           title: 'Sinkronisasi selesai',
           message: `${Number(countSynced).toLocaleString('id-ID')} baris berhasil diproses.`,
         });
+      } else if (res && res.cancelled) {
+        syncTableStatuses.value.forEach((item) => {
+          if (item.status === 'processing') {
+            item.status = 'pending';
+            item.detail = 'Dihentikan';
+          }
+        });
+        notifyToast({
+          type: 'warning',
+          title: 'Sinkronisasi selesai dengan catatan',
+          message: 'Periksa Console Log untuk detail hasil sinkronisasi.',
+        });
       } else {
+        syncTableStatuses.value.forEach((item) => {
+          if (item.status === 'processing') {
+            item.status = 'failed';
+            item.detail = res?.error || 'Sinkronisasi gagal';
+          }
+        });
         notifyToast({
           type: 'warning',
           title: 'Sinkronisasi selesai dengan catatan',
@@ -232,6 +335,12 @@ export function useSyncRunner({
         });
       }
     } catch (err) {
+      syncTableStatuses.value.forEach((item) => {
+        if (item.status === 'processing') {
+          item.status = 'failed';
+          item.detail = err?.message || String(err);
+        }
+      });
       notifyToast({
         type: 'error',
         title: 'Sinkronisasi gagal',
@@ -287,6 +396,7 @@ export function useSyncRunner({
     testingLocal,
     stats,
     syncProgress,
+    syncTableStatuses,
     testPmaConnection,
     testLocalConnection,
     handleStartSync,

@@ -76,20 +76,14 @@
         </div>
         <div class="option-inline">
           <span class="option-title">Limit:</span>
-          <select
-            :value="Number.isFinite(Number(rowLimit)) ? Number(rowLimit) : 0"
-            class="form-select limit-select"
-            @change="$emit('update:row-limit', Number($event.target.value) || 0)"
-          >
-            <option :value="0">Semua Row (Default)</option>
-            <option :value="1000">1.000 Row</option>
-            <option :value="10000">10.000 Row</option>
-            <option :value="100000">100.000 Row</option>
-            <option :value="500000">500.000 Row</option>
-            <option :value="1000000">1.000.000 Row</option>
-            <option :value="2000000">2.000.000 Row</option>
-            <option :value="5000000">5.000.000 Row</option>
-          </select>
+          <BaseSelect
+            :model-value="Number.isFinite(Number(rowLimit)) ? Number(rowLimit) : 0"
+            :options="rowLimitOptions"
+            direction="up"
+            aria-label="Limit baris sinkronisasi"
+            trigger-class="min-w-[160px]"
+            @update:model-value="$emit('update:row-limit', Number($event) || 0)"
+          />
         </div>
         <button class="btn btn-secondary btn-sm console-trigger" type="button" @click="$emit('open-console')">
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
@@ -132,6 +126,18 @@ import { formatNumber } from '../utils/formatters.js';
 import { useElapsedTimer } from '../composables/useElapsedTimer.js';
 import SyncStatsGrid from './sync/SyncStatsGrid.vue';
 import SyncTableStatesCard from './sync/SyncTableStatesCard.vue';
+import BaseSelect from './common/BaseSelect.vue';
+
+const rowLimitOptions = [
+  { value: 0, label: 'Semua Row (Default)' },
+  { value: 1000, label: '1.000 Row' },
+  { value: 10000, label: '10.000 Row' },
+  { value: 100000, label: '100.000 Row' },
+  { value: 500000, label: '500.000 Row' },
+  { value: 1000000, label: '1.000.000 Row' },
+  { value: 2000000, label: '2.000.000 Row' },
+  { value: 5000000, label: '5.000.000 Row' },
+];
 
 const props = defineProps({
   isSyncing: { type: Boolean, default: false },
