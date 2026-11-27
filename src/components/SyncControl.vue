@@ -75,7 +75,7 @@
           <BaseSelect
             :model-value="Number.isFinite(Number(rowLimit)) ? Number(rowLimit) : 0"
             :options="rowLimitOptions"
-            direction="up"
+            direction="down"
             aria-label="Limit baris sinkronisasi"
             trigger-class="min-w-[160px]"
             @update:model-value="$emit('update:row-limit', Number($event) || 0)"

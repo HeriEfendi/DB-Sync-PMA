@@ -181,10 +181,10 @@ export default {
 
       if (dir === 'up') {
         style.bottom = `${window.innerHeight - rect.top + 4}px`;
-        style.maxHeight = `${Math.max(120, spaceAbove - 12)}px`;
+        style.maxHeight = `${Math.max(60, spaceAbove - 8)}px`;
       } else {
         style.top = `${rect.bottom + 4}px`;
-        style.maxHeight = `${Math.max(120, spaceBelow - 12)}px`;
+        style.maxHeight = `${Math.max(60, spaceBelow - 8)}px`;
       }
 
       this.menuStyle = style;
