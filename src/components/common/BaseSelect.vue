@@ -18,7 +18,7 @@
       @click="toggle"
       @keydown="onKeydown"
     >
-      <span class="truncate">{{ selectedLabel }}</span>
+      <span :class="['truncate', !selectedOption && placeholder ? 'text-[#9ca3af]' : '']">{{ selectedLabel }}</span>
       <ChevronUp
         v-if="isOpen && resolvedDirection === 'up'"
         :size="14"
@@ -50,16 +50,19 @@
           :key="String(opt.value)"
           role="option"
           :aria-selected="isSelected(opt)"
+          :aria-disabled="opt.disabled ? 'true' : undefined"
           :class="[
-            'flex cursor-pointer items-center justify-between gap-2 rounded-[4px] px-2.5 py-1.5 transition-colors duration-100',
-            isSelected(opt)
-              ? 'bg-[#2563eb]/20 font-medium text-[#93c5fd]'
-              : idx === activeIndex
-                ? 'bg-white/10 text-white'
-                : 'text-[#d1d5db] hover:bg-white/10 hover:text-white',
+            'flex items-center justify-between gap-2 rounded-[4px] px-2.5 py-1.5 transition-colors duration-100',
+            opt.disabled
+              ? 'cursor-not-allowed text-[#64748b] opacity-50'
+              : isSelected(opt)
+                ? 'cursor-pointer bg-[#2563eb]/20 font-medium text-[#93c5fd]'
+                : idx === activeIndex
+                  ? 'cursor-pointer bg-white/10 text-white'
+                  : 'cursor-pointer text-[#d1d5db] hover:bg-white/10 hover:text-white',
           ]"
-          @mouseenter="activeIndex = idx"
-          @mousedown.prevent="selectOption(opt)"
+          @mouseenter="!opt.disabled && (activeIndex = idx)"
+          @mousedown.prevent="!opt.disabled && selectOption(opt)"
         >
           <span class="truncate">{{ opt.label }}</span>
           <Check v-if="isSelected(opt)" :size="13" class="shrink-0 text-[#60a5fa]" />
@@ -101,6 +104,10 @@ export default {
       type: String,
       default: 'Pilih opsi',
     },
+    placeholder: {
+      type: String,
+      default: '',
+    },
     triggerClass: {
       type: String,
       default: '',
@@ -121,7 +128,7 @@ export default {
       return this.options.find((opt) => this.isSelected(opt)) || null;
     },
     selectedLabel() {
-      return this.selectedOption ? this.selectedOption.label : '';
+      return this.selectedOption ? this.selectedOption.label : this.placeholder;
     },
   },
   beforeUnmount() {
@@ -183,6 +190,7 @@ export default {
       this.menuStyle = style;
     },
     selectOption(opt) {
+      if (!opt || opt.disabled) return;
       this.$emit('update:modelValue', opt.value);
       this.$emit('change', opt.value);
       this.close();

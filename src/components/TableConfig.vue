@@ -22,17 +22,25 @@
         <span>Terpilih: <strong>{{ selectedTables.length }}</strong> / {{ availableTables.length }}</span>
       </div>
       <div class="tools-divider"></div>
-      <select v-model="selectedTemplateName" class="form-select preset-select" @change="loadTableTemplate">
-        <option value="">-- Template Tabel --</option>
-        <option v-for="(t, key) in tableTemplates" :key="key" :value="key">{{ key }}</option>
-      </select>
-      <label class="sr-only" for="table-template-action">Kelola template tabel</label>
-      <select id="table-template-action" class="form-select preset-select" value="" @change="handleTableTemplateAction">
-        <option value="" disabled>Kelola Template Tabel</option>
-        <option value="update" :disabled="!selectedTemplateName">Update</option>
-        <option value="create">Tambah</option>
-        <option value="delete" :disabled="!selectedTemplateName">Delete</option>
-      </select>
+      <BaseSelect
+        :model-value="selectedTemplateName"
+        :options="templateSelectOptions"
+        direction="down"
+        placeholder="-- Template Tabel --"
+        aria-label="Pilih template tabel"
+        trigger-class="min-w-[140px] max-w-[180px]"
+        @update:model-value="selectedTemplateName = $event; loadTableTemplate()"
+      />
+      <BaseSelect
+        id="table-template-action"
+        model-value=""
+        :options="templateActionOptions"
+        direction="down"
+        placeholder="Kelola Template Tabel"
+        aria-label="Kelola template tabel"
+        trigger-class="min-w-[155px] max-w-[180px]"
+        @update:model-value="handleTableTemplateAction($event)"
+      />
     </div>
 
     <div class="table-select-container">
@@ -79,6 +87,7 @@
 import { ref, computed, watch, onMounted, toRef } from 'vue';
 import { useTableTemplates } from '../composables/useTableTemplates.js';
 import TableItemCard from './table/TableItemCard.vue';
+import BaseSelect from './common/BaseSelect.vue';
 
 const props = defineProps({
   serverKey: { type: String, default: 'default' },
@@ -134,6 +143,17 @@ const {
   requestInput: props.requestInput,
   requestConfirmation: props.requestConfirmation,
 });
+
+const templateSelectOptions = computed(() => [
+  { value: '', label: '-- Template Tabel --' },
+  ...Object.keys(tableTemplates.value || {}).map((key) => ({ value: key, label: key })),
+]);
+
+const templateActionOptions = computed(() => [
+  { value: 'update', label: 'Update', disabled: !selectedTemplateName.value },
+  { value: 'create', label: 'Tambah' },
+  { value: 'delete', label: 'Delete', disabled: !selectedTemplateName.value },
+]);
 
 watch(() => props.serverKey, (newKey) => {
   loadTableTemplateList();

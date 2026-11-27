@@ -39,15 +39,16 @@
         {{ localDatabase || 'Lokal belum diatur' }}
       </p>
       <label class="sr-only" for="main-connection-select">Pilih koneksi database</label>
-      <select
+      <BaseSelect
         id="main-connection-select"
-        class="profile-select"
-        :value="selectedPreset"
-        @change="$emit('select-preset', $event.target.value)"
-      >
-        <option v-if="!selectedPreset" value="" disabled>Pilih koneksi tersimpan</option>
-        <option v-for="(preset, name) in presetOptions" :key="name" :value="name">{{ name }}</option>
-      </select>
+        :model-value="selectedPreset"
+        :options="presetSelectOptions"
+        direction="down"
+        placeholder="Pilih koneksi tersimpan"
+        aria-label="Pilih koneksi database"
+        trigger-class="w-[180px] max-w-[180px]"
+        @update:model-value="$emit('select-preset', $event)"
+      />
     </div>
 
     <div class="profile-actions">
@@ -60,6 +61,7 @@
 <script setup>
 import { computed } from 'vue';
 import packageJson from '../../package.json';
+import BaseSelect from './common/BaseSelect.vue';
 
 const props = defineProps({
   pmaStatus: {
@@ -87,6 +89,9 @@ const props = defineProps({
 });
 
 const displayVersion = computed(() => props.appVersion || packageJson.version);
+const presetSelectOptions = computed(() =>
+  Object.keys(props.presetOptions || {}).map((name) => ({ value: name, label: name }))
+);
 
 defineEmits(['trigger-sync', 'test-pma', 'test-local', 'select-preset', 'edit-config', 'create-profile']);
 </script>

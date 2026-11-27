@@ -82,9 +82,13 @@ export function useTableTemplates({ serverKeyRef, selectedTablesRef, emit, notif
     });
   };
 
-  const handleTableTemplateAction = (event) => {
-    const action = event.target.value;
-    event.target.value = '';
+  const handleTableTemplateAction = (eventOrAction) => {
+    const action = typeof eventOrAction === 'string'
+      ? eventOrAction
+      : eventOrAction?.target?.value;
+    if (eventOrAction?.target) {
+      eventOrAction.target.value = '';
+    }
 
     if (action === 'update') updateTableTemplate();
     if (action === 'create') createTableTemplate();

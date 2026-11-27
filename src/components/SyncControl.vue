@@ -32,18 +32,14 @@
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
             <span>Otomatisasi:</span>
           </label>
-          <select
-            :value="autoSyncInterval"
-            class="form-select interval-select"
-            @change="$emit('update:autoSyncInterval', parseInt($event.target.value, 10))"
-          > 
-            <option :value="0">Non-Aktif (Manual)</option>
-            <option :value="5">Setiap 5 Detik</option>
-            <option :value="10">Setiap 10 Detik</option>
-            <option :value="30">Setiap 30 Detik</option>
-            <option :value="60">Setiap 1 Menit</option>
-            <option :value="300">Setiap 5 Menit</option>
-          </select>
+          <BaseSelect
+            :model-value="autoSyncInterval"
+            :options="autoSyncOptions"
+            direction="down"
+            aria-label="Interval sinkronisasi otomatis"
+            trigger-class="min-w-[145px]"
+            @update:model-value="$emit('update:autoSyncInterval', parseInt($event, 10))"
+          />
         </div>
 
         <div v-if="isSyncing" class="sync-status-indicator" role="status">
@@ -127,6 +123,15 @@ import { useElapsedTimer } from '../composables/useElapsedTimer.js';
 import SyncStatsGrid from './sync/SyncStatsGrid.vue';
 import SyncTableStatesCard from './sync/SyncTableStatesCard.vue';
 import BaseSelect from './common/BaseSelect.vue';
+
+const autoSyncOptions = [
+  { value: 0, label: 'Non-Aktif (Manual)' },
+  { value: 5, label: 'Setiap 5 Detik' },
+  { value: 10, label: 'Setiap 10 Detik' },
+  { value: 30, label: 'Setiap 30 Detik' },
+  { value: 60, label: 'Setiap 1 Menit' },
+  { value: 300, label: 'Setiap 5 Menit' },
+];
 
 const rowLimitOptions = [
   { value: 0, label: 'Semua Row (Default)' },
